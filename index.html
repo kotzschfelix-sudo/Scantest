@@ -4,22 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#111827">
-<title>Barcode-Generator</title>
+<title>Schullager – Barcode-Scanner und Generator</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#111827;color:#f9fafb}
 *{box-sizing:border-box}body{margin:0;padding:24px 16px}main{max-width:760px;margin:auto}
-h1{font-size:28px;margin:0 0 6px}.muted{color:#9ca3af;line-height:1.5}
+h1{font-size:28px;margin:0 0 6px}h2{margin-top:0}.muted{color:#9ca3af;line-height:1.5}
 section{background:#1f2937;border:1px solid #374151;border-radius:16px;padding:18px;margin-top:18px}
 label{display:block;font-weight:650;margin:0 0 8px}
 input{width:100%;padding:13px;border-radius:10px;border:1px solid #4b5563;background:#111827;color:#fff;font-size:18px}
 button{border:0;border-radius:10px;padding:12px 16px;background:#6ee7b7;color:#052e25;font-weight:700;font-size:15px;cursor:pointer}
-button.secondary{background:#374151;color:#f9fafb}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button.secondary{background:#374151;color:#f9fafb}button:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 .preview{background:#fff;color:#111827;border-radius:12px;padding:22px 14px;text-align:center;margin-top:16px}
 #barcode{width:100%;max-width:620px;height:auto}
 #printedValue{font-size:16px;font-weight:700;letter-spacing:1px;margin-top:8px;overflow-wrap:anywhere}
-.status{font-size:14px;color:#fca5a5;margin-top:10px;min-height:20px}
+.status{font-size:14px;color:#a7f3d0;margin-top:10px;min-height:20px}
+.error{color:#fca5a5}
 .small{font-size:13px;color:#9ca3af}
+#reader{max-width:500px;margin:16px auto 0;overflow:hidden;border-radius:12px;background:#fff}
+.output{font-size:24px;font-weight:700;overflow-wrap:anywhere;padding:14px;background:#111827;border-radius:10px;min-height:58px}
 @media print{
  body{background:#fff;color:#000;padding:0}main{max-width:none}h1,.intro,section:not(.printable),.no-print{display:none!important}
  section.printable{display:block;border:0;background:#fff;padding:0;margin:0}
@@ -29,48 +34,113 @@ button.secondary{background:#374151;color:#f9fafb}.actions{display:flex;gap:10px
 </head>
 <body>
 <main>
-<h1>Barcode-Generator</h1>
-<p class="muted intro">Erzeuge druckbare Barcodes für Geräte, Cases und Material im Schullager.</p>
-<section>
+<h1>Schullager – Barcodes</h1>
+<p class="muted intro">Barcodes erzeugen, ausdrucken und vorhandene Etiketten mit der Kamera einlesen.</p>
+
+<section class="no-print">
+<h2>1. Barcode scannen</h2>
+<p class="muted">Starte die Kamera und erlaube den Zugriff. Für den Kamerascanner muss die Seite über HTTPS geöffnet sein.</p>
+<div class="actions">
+<button id="startScan">Kamera starten</button>
+<button id="stopScan" class="secondary" disabled>Scanner stoppen</button>
+</div>
+<div id="reader"></div>
+<div id="scanStatus" class="status" role="status">Scanner noch nicht gestartet.</div>
+<h3>Gelesener Inhalt</h3>
+<div id="scanValue" class="output" aria-live="polite">Noch kein Barcode erkannt</div>
+</section>
+
+<section class="no-print">
+<h2>2. Barcode erzeugen</h2>
 <label for="codeInput">Barcode-Inhalt</label>
 <input id="codeInput" type="text" value="000001" maxlength="40" autocomplete="off" spellcheck="false">
 <p class="small">Gib eine eindeutige Kennung ein. Der Barcode speichert genau diesen Text.</p>
-<div class="actions no-print">
+<div class="actions">
 <button id="generate">Barcode erzeugen</button>
 <button id="print" class="secondary">Drucken</button>
 </div>
-<div id="status" class="status" role="status"></div>
+<div id="generatorStatus" class="status" role="status"></div>
 </section>
+
 <section class="printable">
-<h2 class="no-print">Vorschau</h2>
+<h2 class="no-print">3. Druckvorschau</h2>
 <div class="preview">
 <svg id="barcode" role="img" aria-label="Generierter Code-128-Barcode"></svg>
 <div id="printedValue">000001</div>
 </div>
 </section>
+
 <section class="no-print">
-<h2>So funktioniert es später mit dem Raspberry Pi</h2>
-<p class="muted">Du druckst den Barcode aus und klebst ihn auf ein Gerät oder Case. Ein USB- oder Bluetooth-Scanner liest die Kennung ein. Die Software auf dem Raspberry Pi kann diese Kennung anschließend in ihrer Lagerdatenbank suchen.</p>
-<p class="small">Wichtig: Dieser Generator erstellt und druckt Barcodes. Eine Lagerdatenbank und die Raspberry-Pi-Anbindung kommen als nächste Ausbaustufe.</p>
+<h2>Späterer Raspberry-Pi-Betrieb</h2>
+<p class="muted">Ein USB-Barcodescanner kann normalerweise wie eine Tastatur arbeiten: Er sendet die gelesene Kennung an die Lager-Software auf dem Raspberry Pi. Die Kamera-Funktion hier dient zunächst zum Testen im Browser.</p>
+<p class="small">Noch nicht enthalten: gemeinsame Lagerdatenbank, Geräteverwaltung und Raspberry-Pi-Anbindung.</p>
 </section>
 </main>
 <script>
 const input=document.getElementById("codeInput");
-const statusEl=document.getElementById("status");
+const generatorStatus=document.getElementById("generatorStatus");
 function generate(){
  const value=input.value.trim();
- if(!value){statusEl.textContent="Bitte zuerst einen Inhalt eingeben.";return;}
- if(!window.JsBarcode){statusEl.textContent="Die Barcode-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen.";return;}
+ if(!value){generatorStatus.textContent="Bitte zuerst einen Inhalt eingeben.";generatorStatus.classList.add("error");return false;}
+ if(!window.JsBarcode){generatorStatus.textContent="Barcode-Bibliothek nicht geladen. Internetverbindung prüfen.";generatorStatus.classList.add("error");return false;}
  try{
   JsBarcode("#barcode",value,{format:"CODE128",lineColor:"#111827",background:"#ffffff",width:2,height:100,displayValue:false,margin:8});
   document.getElementById("printedValue").textContent=value;
-  statusEl.textContent="Code-128-Barcode erfolgreich erzeugt.";
- }catch(error){statusEl.textContent="Dieser Inhalt konnte nicht als Code 128 codiert werden. Bitte Buchstaben und Zahlen verwenden.";}
+  generatorStatus.textContent="Code-128-Barcode erfolgreich erzeugt.";
+  generatorStatus.classList.remove("error");
+  return true;
+ }catch(error){
+  generatorStatus.textContent="Barcode konnte nicht erzeugt werden. Bitte nur unterstützte Buchstaben und Zahlen verwenden.";
+  generatorStatus.classList.add("error");
+  return false;
+ }
 }
 document.getElementById("generate").addEventListener("click",generate);
-document.getElementById("print").addEventListener("click",()=>{generate();if(input.value.trim())window.print();});
+document.getElementById("print").addEventListener("click",()=>{if(generate())window.print();});
 input.addEventListener("keydown",event=>{if(event.key==="Enter")generate();});
 generate();
+
+let scanner=null;
+const scanStatus=document.getElementById("scanStatus");
+const scanValue=document.getElementById("scanValue");
+function stopScanner(){
+ if(scanner){
+  const active=scanner;
+  scanner=null;
+  active.clear().catch(()=>{});
+ }
+ document.getElementById("startScan").disabled=false;
+ document.getElementById("stopScan").disabled=true;
+}
+document.getElementById("startScan").addEventListener("click",async()=>{
+ if(!window.Html5QrcodeScanner){
+  scanStatus.textContent="Scanner-Bibliothek konnte nicht geladen werden. Internetverbindung prüfen.";
+  scanStatus.classList.add("error");
+  return;
+ }
+ document.getElementById("startScan").disabled=true;
+ scanStatus.textContent="Kamera wird gestartet …";
+ scanStatus.classList.remove("error");
+ try{
+  scanner=new Html5Qrcode("reader");
+  await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:150}},
+   decoded=>{
+    scanValue.textContent=decoded;
+    scanStatus.textContent="Barcode erfolgreich erkannt.";
+    stopScanner();
+   },
+   ()=>{}
+  );
+  document.getElementById("stopScan").disabled=false;
+  scanStatus.textContent="Kamera aktiv. Halte einen Barcode vor die Kamera.";
+ }catch(error){
+  scanner=null;
+  document.getElementById("startScan").disabled=false;
+  scanStatus.textContent="Kamera konnte nicht gestartet werden. Berechtigung und HTTPS-Verbindung prüfen.";
+  scanStatus.classList.add("error");
+ }
+});
+document.getElementById("stopScan").addEventListener("click",stopScanner);
 </script>
 </body>
 </html>
