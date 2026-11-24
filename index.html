@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#101827">
+<meta name="description" content="Barcodegestützte Lagerverwaltung für Veranstaltungstechnik und Schulinventar.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 <title>Schullager – Lagerverwaltung</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
@@ -28,7 +31,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 dialog{border:1px solid #42536b;border-radius:14px;background:#19263a;color:#f8fafc;width:min(520px,calc(100% - 28px));padding:20px}dialog::backdrop{background:#050b14bb}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
 @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}.grid,.two{grid-template-columns:1fr}.grid .wide{grid-column:auto}header{padding:16px}main{padding:16px 12px 40px}table{min-width:720px}}
-@media print{body{background:#fff;color:#000}.no-print{display:none!important}.barcode-preview{margin:0}}
+@media print{@page{margin:5mm}body{background:#fff;color:#000}body *{visibility:hidden!important}#labelPrintArea,#labelPrintArea *{visibility:visible!important}#labelPrintArea{display:grid!important;position:absolute;inset:0;grid-template-columns:repeat(3,1fr);gap:5mm;padding:0}.print-label{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid #bbb;padding:3mm;min-height:32mm;break-inside:avoid;color:#000}.print-label svg{width:100%;max-height:17mm}.print-name{font-size:10pt;font-weight:700;text-align:center;overflow-wrap:anywhere}.print-code{font-family:monospace;font-size:9pt}.print-brand{font-size:7pt;color:#555}}#labelPrintArea{display:none}
 </style>
 </head>
 <body>
@@ -50,8 +53,9 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
  </section>
 
  <section id="appView" class="hidden">
+  <div id="pendingAccess" class="panel hidden"><h2>Zugang noch nicht freigeschaltet</h2><p class="muted">Ein Administrator muss deinem Konto zuerst eine Rolle zuweisen. Bis dahin sind keine Lagerdaten sichtbar.</p></div>
   <nav class="no-print" id="tabs">
-   <button class="active" data-tab="dashboard">Übersicht</button><button data-tab="items">Artikel</button><button data-tab="categories">Kategorien</button><button data-tab="locations">Lagerorte</button><button data-tab="history">Bewegungen</button><button data-tab="tools">Scanner & Barcodes</button>
+   <button class="active" data-tab="dashboard">Übersicht</button><button data-tab="items">Artikel</button><button data-tab="categories">Kategorien</button><button data-tab="locations">Lagerorte</button><button data-tab="history">Bewegungen</button><button data-tab="loans">Ausleihen</button><button data-tab="users" id="usersTab" class="hidden">Benutzer</button><button data-tab="tools">Scanner & Barcodes</button>
   </nav>
   <section id="tab-dashboard">
    <div class="stats">
@@ -65,8 +69,8 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
   </section>
 
   <section id="tab-items" class="hidden">
-   <div class="panel">
-    <h2>Artikel hinzufügen</h2>
+   <div class="panel" id="itemFormPanel">
+    <h2 id="itemFormTitle">Artikel hinzufügen</h2>
     <form id="itemForm">
      <div class="grid">
       <div class="field"><label for="itemName">Bezeichnung *</label><input id="itemName" required maxlength="120" placeholder="z. B. LED-Scheinwerfer"></div>
@@ -84,7 +88,7 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
       <div class="field"><label for="itemSerial">Seriennummer</label><input id="itemSerial" maxlength="100"></div>
       <div class="field wide"><label for="itemDescription">Notizen</label><textarea id="itemDescription" maxlength="1000"></textarea></div>
      </div>
-     <div class="actions"><button type="submit">Artikel speichern</button><button type="button" class="secondary" id="makeBarcode">Kennung erzeugen</button></div>
+     <div class="actions"><button id="saveItemBtn" type="submit">Artikel speichern</button><button type="button" class="secondary" id="makeBarcode">Kennung erzeugen</button><button type="button" class="secondary hidden" id="cancelEdit">Bearbeiten abbrechen</button></div>
      <p id="itemMessage" class="small" role="status"></p>
     </form>
    </div>
@@ -95,6 +99,7 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
      <div class="field"><label for="sortItems">Sortieren nach</label><select id="sortItems"><option value="name">Name A–Z</option><option value="barcode">Barcode</option><option value="category">Kategorie</option><option value="location">Lagerort</option><option value="quantity">Menge (absteigend)</option><option value="status">Status</option><option value="updated">Zuletzt geändert</option></select></div>
      <div class="field"><label for="filterCategory">Kategorie</label><select id="filterCategory"><option value="">Alle Kategorien</option></select></div>
     </div>
+    <div class="toolbar no-print"><button id="printSelectedLabels" class="secondary" type="button" disabled>Etiketten drucken (0)</button><span class="small">Mehrere Artikel markieren und gemeinsam drucken.</span></div>
     <div id="itemsTable" class="tablewrap"></div>
    </div>
   </section>
@@ -113,15 +118,18 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
   </section>
 
   <section id="tab-history" class="hidden"><div class="panel"><h2>Lagerbewegungen</h2><p class="muted">Einlagerungen, Ausgaben und Umlagerungen werden hier protokolliert.</p><div id="historyTable" class="tablewrap"></div></div></section>
+  <section id="tab-loans" class="hidden"><div class="panel"><h2>Ausleihen & Rückgaben</h2><p class="muted">Ausgegebene Mengen werden direkt vom Bestand abgezogen und Rückgaben wieder eingebucht.</p><div id="loansTable" class="tablewrap"></div></div></section>
+  <section id="tab-users" class="hidden"><div class="panel"><h2>Benutzerrechte verwalten</h2><p class="muted">Neue Konten sind zunächst gesperrt. Gib nur berechtigten Personen eine passende Rolle.</p><div id="userRoleTable" class="tablewrap"></div></div></section>
 
   <section id="tab-tools" class="hidden">
    <div class="two">
-    <div class="panel"><h2>Barcode scannen</h2><p class="muted">Kamera starten oder einen USB-Scanner anschließen. Viele USB-Scanner geben den Code wie eine Tastatur ein.</p><div class="actions"><button id="startScan">Kamera starten</button><button class="secondary" id="stopScan" disabled>Stoppen</button></div><div id="reader"></div><p id="scanStatus" class="small" role="status">Scanner noch nicht gestartet.</p><div id="scanResult" class="panel hidden"></div><div class="field"><label for="manualScan">Barcode manuell eingeben</label><input id="manualScan" placeholder="Barcode eingeben und Enter drücken"></div><button class="secondary" id="lookupBarcode">Artikel suchen</button></div>
+    <div class="panel"><h2>Barcode scannen</h2><p class="muted">Kamera starten oder einen USB-Scanner anschließen. Viele USB-Scanner geben den Code wie eine Tastatur ein.</p><div class="actions"><button id="startScan">Kamera starten</button><button class="secondary" id="stopScan" disabled>Stoppen</button></div><div id="reader"></div><p id="scanStatus" class="small" role="status">Scanner noch nicht gestartet.</p><div id="scanResult" class="panel hidden"></div><div class="field"><label for="manualScan">USB-Scanner / Barcode manuell eingeben</label><input id="manualScan" placeholder="Scanner-Eingabe: Barcode + Enter"></div><button class="secondary smallbtn" id="focusScannerInput" type="button">Scanner-Feld aktivieren</button><button class="secondary" id="lookupBarcode">Artikel suchen</button></div>
     <div class="panel"><h2>Code-128 erzeugen</h2><div class="field"><label for="generatorInput">Barcode-Inhalt</label><input id="generatorInput" maxlength="40" value="SL000001"></div><div class="actions"><button id="generateBarcode">Erzeugen</button><button class="secondary" id="printBarcode">Drucken</button></div><p id="generatorStatus" class="small"></p><div class="barcode-preview"><svg id="barcodeSvg"></svg><div id="barcodeText" style="font-weight:700;margin-top:6px">SL000001</div></div><p class="small">Der Barcode speichert exakt den eingegebenen Text. Vor dem Drucken sicherstellen, dass die Kennung noch nicht vergeben ist.</p></div>
    </div>
   </section>
  </section>
 </main>
+<div id="labelPrintArea" aria-hidden="true"></div>
 <dialog id="movementDialog">
  <h2 id="movementTitle">Lagerbewegung</h2><p id="movementItem" class="muted"></p>
  <form id="movementForm">
@@ -133,12 +141,14 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
   <div class="dialog-actions"><button type="button" class="secondary" id="cancelMovement">Abbrechen</button><button type="submit">Buchen</button></div><p id="movementMessage" class="small"></p>
  </form>
 </dialog>
-<footer>Schullager · Erste Version · Datenbank: Supabase</footer>
+<dialog id="loanDialog"><h2>Artikel ausleihen</h2><p id="loanItemInfo" class="muted"></p><form id="loanForm"><input type="hidden" id="loanItemId"><div class="field"><label for="loanBorrower">Empfänger / verantwortliche Person *</label><input id="loanBorrower" maxlength="120" required></div><div class="field"><label for="loanGroup">Klasse / Gruppe / Veranstaltung</label><input id="loanGroup" maxlength="120"></div><div class="field"><label for="loanQuantity">Menge *</label><input id="loanQuantity" type="number" min="0.01" step="0.01" value="1" required></div><div class="field"><label for="loanDue">Geplante Rückgabe</label><input id="loanDue" type="date"></div><div class="field"><label for="loanNote">Notiz</label><input id="loanNote" maxlength="250"></div><div class="dialog-actions"><button type="button" class="secondary" id="cancelLoan">Abbrechen</button><button type="submit">Ausleihe buchen</button></div><p id="loanMessage" class="small"></p></form></dialog>
+<dialog id="returnDialog"><h2>Rückgabe erfassen</h2><p id="returnLoanInfo" class="muted"></p><form id="returnForm"><input type="hidden" id="returnLoanId"><div class="field"><label for="returnQuantity">Rückgabemenge *</label><input id="returnQuantity" type="number" min="0.01" step="0.01" required></div><div class="field"><label for="returnNote">Notiz</label><input id="returnNote" maxlength="250"></div><div class="dialog-actions"><button type="button" class="secondary" id="cancelReturn">Abbrechen</button><button type="submit">Rückgabe buchen</button></div><p id="returnMessage" class="small"></p></form></dialog>
+<footer>Schullager · Lagerverwaltung · Datenbank: Supabase</footer>
 <script>
 const SUPABASE_URL = "https://ubwmnlahwgtxzkdzxipk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_sigPCgaFUumWw-f8Tdwysg_m3pj1E1q";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let currentUser = null, isRegister = false, items = [], categories = [], locations = [], movements = [], scanner = null;
+let currentUser = null, currentRole = "pending", userRoles = [], isRegister = false, items = [], allItems = [], categories = [], locations = [], movements = [], loans = [], scanner = null, selectedLabels = new Set(), editingItemId = null;
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = value => new Intl.NumberFormat("de-DE",{maximumFractionDigits:2}).format(Number(value||0));
