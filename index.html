@@ -34,7 +34,7 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
 <body>
 <header>
  <div class="brand"><div class="logo">SL</div><div><h1>Schullager</h1><p>Barcodegestützte Lagerverwaltung</p></div></div>
- <div id="headerUser" class="small"></div>
+ <div class="actions"><span id="headerUser" class="small"></span><button id="signOutBtn" class="secondary smallbtn hidden" type="button">Abmelden</button></div>
 </header>
 <main>
  <section id="authView" class="panel auth">
@@ -147,7 +147,7 @@ const locationName = id => locations.find(x=>x.id===id)?.name || "Kein Lagerort"
 const statusName = s => ({available:"Verfügbar",checked_out:"Ausgegeben",maintenance:"In Reparatur",lost:"Vermisst"}[s]||s);
 const conditionName = s => ({new:"Neu",good:"Gut",used:"Gebraucht",defective:"Defekt"}[s]||s);
 function message(id,text,kind=""){const el=$(id);el.textContent=text;el.className="small "+kind;}
-function setAuthView(signed){$("authView").classList.toggle("hidden",signed);$("appView").classList.toggle("hidden",!signed);$("headerUser").textContent=signed?currentUser.email:"";}
+function setAuthView(signed){$("authView").classList.toggle("hidden",signed);$("appView").classList.toggle("hidden",!signed);$("headerUser").textContent=signed?currentUser.email:"";$("signOutBtn").classList.toggle("hidden",!signed);}
 async function authSubmit(e){
  e.preventDefault();const email=$("email").value.trim(),password=$("password").value;message("authMessage","Bitte warten …");
  const result=isRegister?await db.auth.signUp({email,password}):await db.auth.signInWithPassword({email,password});
@@ -158,7 +158,7 @@ async function authSubmit(e){
 $("authForm").addEventListener("submit",authSubmit);
 $("toggleAuth").addEventListener("click",()=>{isRegister=!isRegister;$("authSubmit").textContent=isRegister?"Konto erstellen":"Anmelden";$("toggleAuth").textContent=isRegister?"Zurück zur Anmeldung":"Noch kein Konto? Registrieren";$("password").autocomplete=isRegister?"new-password":"current-password";});
 async function signOut(){await db.auth.signOut();currentUser=null;setAuthView(false);}
-$("headerUser").addEventListener("click",signOut);
+$("signOutBtn").addEventListener("click",signOut);
 db.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;setAuthView(!!currentUser);if(currentUser)loadAll();});
 async function loadAll(){
  const [a,b,c,d]=await Promise.all([
