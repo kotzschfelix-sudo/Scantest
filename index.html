@@ -123,7 +123,7 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
 
   <section id="tab-tools" class="hidden">
    <div class="two">
-    <div class="panel"><h2>Barcode scannen</h2><p class="muted">Kamera starten oder einen USB-Scanner anschließen. Viele USB-Scanner geben den Code wie eine Tastatur ein.</p><div class="actions"><button id="startScan">Kamera starten</button><button class="secondary" id="stopScan" disabled>Stoppen</button></div><div id="reader"></div><p id="scanStatus" class="small" role="status">Scanner noch nicht gestartet.</p><div id="scanResult" class="panel hidden"></div><div class="field"><label for="manualScan">USB-Scanner / Barcode manuell eingeben</label><input id="manualScan" placeholder="Scanner-Eingabe: Barcode + Enter"></div><button class="secondary smallbtn" id="focusScannerInput" type="button">Scanner-Feld aktivieren</button><button class="secondary" id="lookupBarcode">Artikel suchen</button></div>
+    <div class="panel"><h2>Barcode scannen</h2><p class="muted">Kamera starten oder einen USB-Scanner anschließen. Viele USB-Scanner geben den Code wie eine Tastatur ein.</p><div class="actions"><button id="startScan">Kamera starten</button><button class="secondary" id="stopScan" disabled>Stoppen</button></div><div id="reader"></div><p id="scanStatus" class="small" role="status">Scanner noch nicht gestartet.</p><div id="scanResult" class="panel hidden"></div><div class="field"><label for="manualScan">USB-Scanner / Barcode manuell eingeben</label><input id="manualScan" placeholder="Scanner-Eingabe: Barcode + Enter"></div><button class="secondary smallbtn" id="focusScannerInput" type="button">Scanner-Feld aktivieren</button><button class="secondary" id="lookupBarcode">Artikel suchen</button><p class="small">Raspberry Pi: Diese Website in Chromium über HTTPS öffnen und als App installieren. Ein USB-Scanner sollte als Tastatur (HID) erkannt werden und nach dem Code Enter senden. Für die Supabase-Datenbank ist eine Internetverbindung nötig; eine vollständige Offline-Lagerverwaltung ist noch nicht aktiviert.</p></div>
     <div class="panel"><h2>Code-128 erzeugen</h2><div class="field"><label for="generatorInput">Barcode-Inhalt</label><input id="generatorInput" maxlength="40" value="SL000001"></div><div class="actions"><button id="generateBarcode">Erzeugen</button><button class="secondary" id="printBarcode">Drucken</button></div><p id="generatorStatus" class="small"></p><div class="barcode-preview"><svg id="barcodeSvg"></svg><div id="barcodeText" style="font-weight:700;margin-top:6px">SL000001</div></div><p class="small">Der Barcode speichert exakt den eingegebenen Text. Vor dem Drucken sicherstellen, dass die Kennung noch nicht vergeben ist.</p></div>
    </div>
   </section>
@@ -243,22 +243,22 @@ function renderHistory(){
 }
 function resetItemForm(){
  editingItemId=null;
- $("itemForm").reset();$("itemQuantity").value=1;$("itemUnit").value="Stück";$("itemMin").value=0;
+ $("itemForm").reset();$("itemQuantity").disabled=false;$("itemStatus").disabled=false;$("itemQuantity").value=1;$("itemUnit").value="Stück";$("itemMin").value=0;
  $("itemFormTitle").textContent="Artikel hinzufügen";$("saveItemBtn").textContent="Artikel speichern";$("cancelEdit").classList.add("hidden");
 }
 function startEdit(id){
  const x=items.find(v=>v.id===id);if(!x)return;
  editingItemId=id;
  $("itemName").value=x.name;$("itemBarcode").value=x.barcode;$("itemCategory").value=x.category_id||"";$("itemLocation").value=x.location_id||"";
- $("itemQuantity").value=x.quantity;$("itemUnit").value=x.unit;$("itemType").value=x.item_type;$("itemCondition").value=x.condition;
- $("itemStatus").value=x.status;$("itemMin").value=x.min_quantity;$("itemManufacturer").value=x.manufacturer||"";$("itemModel").value=x.model||"";
+ $("itemQuantity").value=x.quantity;$("itemQuantity").disabled=true;$("itemUnit").value=x.unit;$("itemType").value=x.item_type;$("itemCondition").value=x.condition;
+ $("itemStatus").value=x.status;$("itemStatus").disabled=true;$("itemMin").value=x.min_quantity;$("itemManufacturer").value=x.manufacturer||"";$("itemModel").value=x.model||"";
  $("itemSerial").value=x.serial_number||"";$("itemDescription").value=x.description||"";
  $("itemFormTitle").textContent="Artikel bearbeiten";$("saveItemBtn").textContent="Änderungen speichern";$("cancelEdit").classList.remove("hidden");showTab("items");$("itemName").focus();
 }
 async function archiveItem(id){
  const x=items.find(v=>v.id===id);if(!x)return;
  if(!confirm("Artikel '"+x.name+"' archivieren? Er verschwindet aus dem aktiven Bestand; Bewegungs- und Ausleihhistorie bleibt erhalten."))return;
- const {error}=await db.from("inventory_items").update({archived_at:new Date().toISOString()}).eq("id",id);
+ const {error}=await db.rpc("archive_inventory_item",{p_item_id:id});
  if(error){alert(error.message);return;}
  if(editingItemId===id)resetItemForm();
  selectedLabels.delete(id);await loadAll();
@@ -266,6 +266,7 @@ async function archiveItem(id){
 $("itemForm").addEventListener("submit",async e=>{
  e.preventDefault();
  const payload={name:$("itemName").value.trim(),barcode:$("itemBarcode").value.trim(),category_id:$("itemCategory").value||null,location_id:$("itemLocation").value||null,quantity:Number($("itemQuantity").value),unit:$("itemUnit").value.trim()||"Stück",item_type:$("itemType").value,condition:$("itemCondition").value,status:$("itemStatus").value,min_quantity:Number($("itemMin").value||0),manufacturer:$("itemManufacturer").value.trim()||null,model:$("itemModel").value.trim()||null,serial_number:$("itemSerial").value.trim()||null,description:$("itemDescription").value.trim()||null};
+ if(editingItemId){delete payload.quantity;delete payload.status;}
  const query=editingItemId?db.from("inventory_items").update(payload).eq("id",editingItemId):db.from("inventory_items").insert(payload);
  const {error}=await query;
  if(error){message("itemMessage",error.message,"error");return;}
@@ -361,6 +362,7 @@ $("printBarcode").addEventListener("click",()=>{try{const value=$("generatorInpu
 function printItemBarcode(id){const item=items.find(x=>x.id===id);if(item)printLabelList([item]);}
 $("printSelectedLabels").addEventListener("click",()=>{const rows=items.filter(x=>selectedLabels.has(x.id));printLabelList(rows);});
 generateBarcode("SL000001");
+if("serviceWorker" in navigator&&location.protocol==="https:"){window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(err=>console.warn("Service Worker:",err)));}
 db.auth.getSession().then(({data})=>{currentUser=data.session?.user||null;setAuthView(!!currentUser);if(currentUser)loadAll();});
 </script>
 </body>
