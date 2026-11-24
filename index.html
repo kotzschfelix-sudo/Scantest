@@ -3,144 +3,244 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#111827">
-<title>Schullager – Barcode-Scanner und Generator</title>
+<meta name="theme-color" content="#101827">
+<title>Schullager – Lagerverwaltung</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
-:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#111827;color:#f9fafb}
-*{box-sizing:border-box}body{margin:0;padding:24px 16px}main{max-width:760px;margin:auto}
-h1{font-size:28px;margin:0 0 6px}h2{margin-top:0}.muted{color:#9ca3af;line-height:1.5}
-section{background:#1f2937;border:1px solid #374151;border-radius:16px;padding:18px;margin-top:18px}
-label{display:block;font-weight:650;margin:0 0 8px}
-input{width:100%;padding:13px;border-radius:10px;border:1px solid #4b5563;background:#111827;color:#fff;font-size:18px}
-button{border:0;border-radius:10px;padding:12px 16px;background:#6ee7b7;color:#052e25;font-weight:700;font-size:15px;cursor:pointer}
-button.secondary{background:#374151;color:#f9fafb}button:disabled{opacity:.5;cursor:not-allowed}
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-.preview{background:#fff;color:#111827;border-radius:12px;padding:22px 14px;text-align:center;margin-top:16px}
-#barcode{width:100%;max-width:620px;height:auto}
-#printedValue{font-size:16px;font-weight:700;letter-spacing:1px;margin-top:8px;overflow-wrap:anywhere}
-.status{font-size:14px;color:#a7f3d0;margin-top:10px;min-height:20px}
-.error{color:#fca5a5}
-.small{font-size:13px;color:#9ca3af}
-#reader{max-width:500px;margin:16px auto 0;overflow:hidden;border-radius:12px;background:#fff}
-.output{font-size:24px;font-weight:700;overflow-wrap:anywhere;padding:14px;background:#111827;border-radius:10px;min-height:58px}
-@media print{
- body{background:#fff;color:#000;padding:0}main{max-width:none}h1,.intro,section:not(.printable),.no-print{display:none!important}
- section.printable{display:block;border:0;background:#fff;padding:0;margin:0}
- .preview{margin:0;border-radius:0;padding:12mm;color:#000}
-}
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#eef2f8;background:#101827;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button{border:0;border-radius:9px;padding:10px 14px;background:#72e2b8;color:#092a21;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}.secondary{background:#344256;color:#f4f7fb}.danger{background:#6b2c36;color:#ffe9ec}.smallbtn{padding:7px 10px;font-size:13px}
+header{padding:22px max(18px,calc((100vw - 1160px)/2));background:#172235;border-bottom:1px solid #2c3b50;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:flex;gap:12px;align-items:center}.logo{width:42px;height:42px;border-radius:12px;background:#72e2b8;color:#092a21;display:grid;place-items:center;font-size:22px;font-weight:900}h1{font-size:21px;margin:0}header p{margin:3px 0 0;color:#aab7c9;font-size:13px}
+main{max-width:1160px;margin:0 auto;padding:22px 18px 50px}.hidden{display:none!important}
+.panel{background:#19263a;border:1px solid #2d3d53;border-radius:15px;padding:18px;margin-bottom:16px}.muted{color:#aab7c9}.small{font-size:12px;color:#aab7c9}.error{color:#ff9eaa}.success{color:#8de8c5}
+.auth{max-width:430px;margin:8vh auto}.auth h2{margin-top:0}
+label{display:block;font-size:13px;font-weight:700;color:#cbd5e1;margin:0 0 6px}input,select,textarea{width:100%;border:1px solid #43536a;background:#0f1928;color:#f8fafc;border-radius:9px;padding:11px 12px;min-width:0}textarea{min-height:75px;resize:vertical}.field{margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.grid .wide{grid-column:1/-1}
+nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}nav button{background:#26364d;color:#dbe5f2}nav button.active{background:#72e2b8;color:#092a21}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.stat{background:#19263a;border:1px solid #2d3d53;border-radius:13px;padding:14px}.stat b{display:block;font-size:25px;margin-top:5px}
+.toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px}.toolbar .field{margin:0;flex:1;min-width:170px}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #2d3d53;vertical-align:middle}th{color:#aab7c9;font-size:12px;text-transform:uppercase;letter-spacing:.04em}td .muted{font-size:12px}.tablewrap{overflow-x:auto}
+.pill{display:inline-block;padding:4px 8px;border-radius:99px;background:#26364d;color:#dce8f5;font-size:11px;white-space:nowrap}.pill.good{background:#164b3d;color:#a8f0d5}.pill.warn{background:#5a4823;color:#ffe0a0}.pill.bad{background:#592e39;color:#ffc0c9}
+.actions{display:flex;gap:6px;flex-wrap:wrap}.empty{text-align:center;padding:30px;color:#aab7c9}
+#reader{max-width:440px;margin:12px 0;overflow:hidden;border-radius:10px;background:#fff}.barcode-preview{background:#fff;border-radius:10px;padding:16px;text-align:center;color:#111;margin-top:12px}.barcode-preview svg{max-width:100%;height:auto}.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+dialog{border:1px solid #42536b;border-radius:14px;background:#19263a;color:#f8fafc;width:min(520px,calc(100% - 28px));padding:20px}dialog::backdrop{background:#050b14bb}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}.grid,.two{grid-template-columns:1fr}.grid .wide{grid-column:auto}header{padding:16px}main{padding:16px 12px 40px}table{min-width:720px}}
+@media print{body{background:#fff;color:#000}.no-print{display:none!important}.barcode-preview{margin:0}}
 </style>
 </head>
 <body>
+<header>
+ <div class="brand"><div class="logo">SL</div><div><h1>Schullager</h1><p>Barcodegestützte Lagerverwaltung</p></div></div>
+ <div id="headerUser" class="small"></div>
+</header>
 <main>
-<h1>Schullager – Barcodes</h1>
-<p class="muted intro">Barcodes erzeugen, ausdrucken und vorhandene Etiketten mit der Kamera einlesen.</p>
+ <section id="authView" class="panel auth">
+  <h2>Anmelden</h2><p class="muted">Melde dich an, um auf den gemeinsamen Lagerbestand zuzugreifen.</p>
+  <form id="authForm">
+   <div class="field"><label for="email">E-Mail</label><input id="email" type="email" autocomplete="username" required></div>
+   <div class="field"><label for="password">Passwort</label><input id="password" type="password" autocomplete="current-password" minlength="8" required></div>
+   <button id="authSubmit" type="submit" style="width:100%">Anmelden</button>
+  </form>
+  <p class="small" id="authMessage" role="status"></p>
+  <button class="secondary smallbtn" id="toggleAuth">Noch kein Konto? Registrieren</button>
+  <p class="small">Bitte nur von der Schule freigegebene Konten verwenden. Der Lagerbestand ist für alle angemeldeten Mitglieder dieses Projekts gemeinsam sichtbar.</p>
+ </section>
 
-<section class="no-print">
-<h2>1. Barcode scannen</h2>
-<p class="muted">Starte die Kamera und erlaube den Zugriff. Für den Kamerascanner muss die Seite über HTTPS geöffnet sein.</p>
-<div class="actions">
-<button id="startScan">Kamera starten</button>
-<button id="stopScan" class="secondary" disabled>Scanner stoppen</button>
-</div>
-<div id="reader"></div>
-<div id="scanStatus" class="status" role="status">Scanner noch nicht gestartet.</div>
-<h3>Gelesener Inhalt</h3>
-<div id="scanValue" class="output" aria-live="polite">Noch kein Barcode erkannt</div>
-</section>
+ <section id="appView" class="hidden">
+  <nav class="no-print" id="tabs">
+   <button class="active" data-tab="dashboard">Übersicht</button><button data-tab="items">Artikel</button><button data-tab="categories">Kategorien</button><button data-tab="locations">Lagerorte</button><button data-tab="history">Bewegungen</button><button data-tab="tools">Scanner & Barcodes</button>
+  </nav>
+  <section id="tab-dashboard">
+   <div class="stats">
+    <div class="stat"><span class="small">Artikel / Datensätze</span><b id="statItems">0</b></div>
+    <div class="stat"><span class="small">Gesamtbestand</span><b id="statQuantity">0</b></div>
+    <div class="stat"><span class="small">Lagerorte</span><b id="statLocations">0</b></div>
+    <div class="stat"><span class="small">Mindestbestand prüfen</span><b id="statLow">0</b></div>
+   </div>
+   <div class="panel"><h2>Willkommen im Schullager</h2><p class="muted">Hier verwaltest du Veranstaltungstechnik, Kabel, Licht, Audio, Werkzeug und Verbrauchsmaterial. Jeder Datensatz kann eine eigene Barcode-Kennung erhalten.</p><div class="actions"><button data-goto="items">Artikel verwalten</button><button class="secondary" data-goto="tools">Barcode scannen</button></div></div>
+   <div class="panel"><h3>Zuletzt bearbeitet</h3><div id="recentItems" class="tablewrap"></div></div>
+  </section>
 
-<section class="no-print">
-<h2>2. Barcode erzeugen</h2>
-<label for="codeInput">Barcode-Inhalt</label>
-<input id="codeInput" type="text" value="000001" maxlength="40" autocomplete="off" spellcheck="false">
-<p class="small">Gib eine eindeutige Kennung ein. Der Barcode speichert genau diesen Text.</p>
-<div class="actions">
-<button id="generate">Barcode erzeugen</button>
-<button id="print" class="secondary">Drucken</button>
-</div>
-<div id="generatorStatus" class="status" role="status"></div>
-</section>
+  <section id="tab-items" class="hidden">
+   <div class="panel">
+    <h2>Artikel hinzufügen</h2>
+    <form id="itemForm">
+     <div class="grid">
+      <div class="field"><label for="itemName">Bezeichnung *</label><input id="itemName" required maxlength="120" placeholder="z. B. LED-Scheinwerfer"></div>
+      <div class="field"><label for="itemBarcode">Barcode / Kennung *</label><input id="itemBarcode" required maxlength="40" placeholder="z. B. SL000001"></div>
+      <div class="field"><label for="itemCategory">Kategorie</label><select id="itemCategory"><option value="">Ohne Kategorie</option></select></div>
+      <div class="field"><label for="itemLocation">Lagerort</label><select id="itemLocation"><option value="">Noch kein Lagerort</option></select></div>
+      <div class="field"><label for="itemQuantity">Menge</label><input id="itemQuantity" type="number" min="0" step="0.01" value="1"></div>
+      <div class="field"><label for="itemUnit">Einheit</label><input id="itemUnit" value="Stück" maxlength="20"></div>
+      <div class="field"><label for="itemType">Art</label><select id="itemType"><option value="equipment">Gerät / Ausstattung</option><option value="consumable">Verbrauchsmaterial</option></select></div>
+      <div class="field"><label for="itemCondition">Zustand</label><select id="itemCondition"><option value="new">Neu</option><option value="good" selected>Gut</option><option value="used">Gebraucht</option><option value="defective">Defekt</option></select></div>
+      <div class="field"><label for="itemStatus">Status</label><select id="itemStatus"><option value="available">Verfügbar</option><option value="checked_out">Ausgegeben</option><option value="maintenance">In Reparatur</option><option value="lost">Vermisst</option></select></div>
+      <div class="field"><label for="itemMin">Mindestbestand</label><input id="itemMin" type="number" min="0" step="0.01" value="0"></div>
+      <div class="field"><label for="itemManufacturer">Hersteller</label><input id="itemManufacturer" maxlength="80"></div>
+      <div class="field"><label for="itemModel">Modell</label><input id="itemModel" maxlength="80"></div>
+      <div class="field"><label for="itemSerial">Seriennummer</label><input id="itemSerial" maxlength="100"></div>
+      <div class="field wide"><label for="itemDescription">Notizen</label><textarea id="itemDescription" maxlength="1000"></textarea></div>
+     </div>
+     <div class="actions"><button type="submit">Artikel speichern</button><button type="button" class="secondary" id="makeBarcode">Kennung erzeugen</button></div>
+     <p id="itemMessage" class="small" role="status"></p>
+    </form>
+   </div>
+   <div class="panel">
+    <h2>Bestand</h2>
+    <div class="toolbar">
+     <div class="field"><label for="searchItems">Suchen</label><input id="searchItems" placeholder="Name, Barcode, Hersteller …"></div>
+     <div class="field"><label for="sortItems">Sortieren nach</label><select id="sortItems"><option value="name">Name A–Z</option><option value="barcode">Barcode</option><option value="category">Kategorie</option><option value="location">Lagerort</option><option value="quantity">Menge (absteigend)</option><option value="status">Status</option><option value="updated">Zuletzt geändert</option></select></div>
+     <div class="field"><label for="filterCategory">Kategorie</label><select id="filterCategory"><option value="">Alle Kategorien</option></select></div>
+    </div>
+    <div id="itemsTable" class="tablewrap"></div>
+   </div>
+  </section>
 
-<section class="printable">
-<h2 class="no-print">3. Druckvorschau</h2>
-<div class="preview">
-<svg id="barcode" role="img" aria-label="Generierter Code-128-Barcode"></svg>
-<div id="printedValue">000001</div>
-</div>
-</section>
+  <section id="tab-categories" class="hidden">
+   <div class="panel"><h2>Kategorien verwalten</h2><form id="categoryForm" class="toolbar"><div class="field"><label for="categoryName">Neue Kategorie</label><input id="categoryName" required maxlength="80" placeholder="z. B. Mischpulte"></div><button type="submit">Hinzufügen</button></form><div id="categoryList"></div></div>
+  </section>
 
-<section class="no-print">
-<h2>Späterer Raspberry-Pi-Betrieb</h2>
-<p class="muted">Ein USB-Barcodescanner kann normalerweise wie eine Tastatur arbeiten: Er sendet die gelesene Kennung an die Lager-Software auf dem Raspberry Pi. Die Kamera-Funktion hier dient zunächst zum Testen im Browser.</p>
-<p class="small">Noch nicht enthalten: gemeinsame Lagerdatenbank, Geräteverwaltung und Raspberry-Pi-Anbindung.</p>
-</section>
+  <section id="tab-locations" class="hidden">
+   <div class="panel"><h2>Lagerorte verwalten</h2><p class="muted">Lege z. B. Raum → Schrank → Regal → Fach an. Übergeordnete Lagerorte können als Baumstruktur angelegt werden.</p>
+    <form id="locationForm">
+     <div class="grid"><div class="field"><label for="locationName">Name des Lagerorts</label><input id="locationName" required maxlength="80" placeholder="z. B. Regal A"></div><div class="field"><label for="locationParent">Übergeordneter Ort</label><select id="locationParent"><option value="">Keiner (oberste Ebene)</option></select></div><div class="field wide"><label for="locationDescription">Beschreibung</label><input id="locationDescription" maxlength="200" placeholder="z. B. Linke Seite, oberes Fach"></div></div>
+     <button type="submit">Lagerort hinzufügen</button><p id="locationMessage" class="small"></p>
+    </form><hr style="border-color:#2d3d53;margin:18px 0"><div id="locationList"></div>
+   </div>
+  </section>
+
+  <section id="tab-history" class="hidden"><div class="panel"><h2>Lagerbewegungen</h2><p class="muted">Einlagerungen, Ausgaben und Umlagerungen werden hier protokolliert.</p><div id="historyTable" class="tablewrap"></div></div></section>
+
+  <section id="tab-tools" class="hidden">
+   <div class="two">
+    <div class="panel"><h2>Barcode scannen</h2><p class="muted">Kamera starten oder einen USB-Scanner anschließen. Viele USB-Scanner geben den Code wie eine Tastatur ein.</p><div class="actions"><button id="startScan">Kamera starten</button><button class="secondary" id="stopScan" disabled>Stoppen</button></div><div id="reader"></div><p id="scanStatus" class="small" role="status">Scanner noch nicht gestartet.</p><div id="scanResult" class="panel hidden"></div><div class="field"><label for="manualScan">Barcode manuell eingeben</label><input id="manualScan" placeholder="Barcode eingeben und Enter drücken"></div><button class="secondary" id="lookupBarcode">Artikel suchen</button></div>
+    <div class="panel"><h2>Code-128 erzeugen</h2><div class="field"><label for="generatorInput">Barcode-Inhalt</label><input id="generatorInput" maxlength="40" value="SL000001"></div><div class="actions"><button id="generateBarcode">Erzeugen</button><button class="secondary" id="printBarcode">Drucken</button></div><p id="generatorStatus" class="small"></p><div class="barcode-preview"><svg id="barcodeSvg"></svg><div id="barcodeText" style="font-weight:700;margin-top:6px">SL000001</div></div><p class="small">Der Barcode speichert exakt den eingegebenen Text. Vor dem Drucken sicherstellen, dass die Kennung noch nicht vergeben ist.</p></div>
+   </div>
+  </section>
+ </section>
 </main>
+<dialog id="movementDialog">
+ <h2 id="movementTitle">Lagerbewegung</h2><p id="movementItem" class="muted"></p>
+ <form id="movementForm">
+  <input type="hidden" id="movementItemId">
+  <div class="field"><label for="movementType">Vorgang</label><select id="movementType"><option value="in">Einlagern / Zugang</option><option value="out">Auslagern / Ausgabe</option><option value="move">Umlagern</option></select></div>
+  <div class="field" id="movementQtyWrap"><label for="movementQty">Menge</label><input id="movementQty" type="number" min="0.01" step="0.01" value="1"></div>
+  <div class="field"><label for="movementLocation">Ziellagerort (bei Einlagerung / Umlagerung)</label><select id="movementLocation"><option value="">Aktuellen Ort beibehalten</option></select></div>
+  <div class="field"><label for="movementNote">Notiz</label><input id="movementNote" maxlength="250" placeholder="z. B. für Veranstaltung ausgegeben"></div>
+  <div class="dialog-actions"><button type="button" class="secondary" id="cancelMovement">Abbrechen</button><button type="submit">Buchen</button></div><p id="movementMessage" class="small"></p>
+ </form>
+</dialog>
+<footer>Schullager · Erste Version · Datenbank: Supabase</footer>
 <script>
-const input=document.getElementById("codeInput");
-const generatorStatus=document.getElementById("generatorStatus");
-function generate(){
- const value=input.value.trim();
- if(!value){generatorStatus.textContent="Bitte zuerst einen Inhalt eingeben.";generatorStatus.classList.add("error");return false;}
- if(!window.JsBarcode){generatorStatus.textContent="Barcode-Bibliothek nicht geladen. Internetverbindung prüfen.";generatorStatus.classList.add("error");return false;}
- try{
-  JsBarcode("#barcode",value,{format:"CODE128",lineColor:"#111827",background:"#ffffff",width:2,height:100,displayValue:false,margin:8});
-  document.getElementById("printedValue").textContent=value;
-  generatorStatus.textContent="Code-128-Barcode erfolgreich erzeugt.";
-  generatorStatus.classList.remove("error");
-  return true;
- }catch(error){
-  generatorStatus.textContent="Barcode konnte nicht erzeugt werden. Bitte nur unterstützte Buchstaben und Zahlen verwenden.";
-  generatorStatus.classList.add("error");
-  return false;
- }
+const SUPABASE_URL = "https://ubwmnlahwgtxzkdzxipk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_sigPCgaFUumWw-f8Tdwysg_m3pj1E1q";
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let currentUser = null, isRegister = false, items = [], categories = [], locations = [], movements = [], scanner = null;
+const $ = id => document.getElementById(id);
+const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = value => new Intl.NumberFormat("de-DE",{maximumFractionDigits:2}).format(Number(value||0));
+const categoryName = id => categories.find(x=>x.id===id)?.name || "Ohne Kategorie";
+const locationName = id => locations.find(x=>x.id===id)?.name || "Kein Lagerort";
+const statusName = s => ({available:"Verfügbar",checked_out:"Ausgegeben",maintenance:"In Reparatur",lost:"Vermisst"}[s]||s);
+const conditionName = s => ({new:"Neu",good:"Gut",used:"Gebraucht",defective:"Defekt"}[s]||s);
+function message(id,text,kind=""){const el=$(id);el.textContent=text;el.className="small "+kind;}
+function setAuthView(signed){$("authView").classList.toggle("hidden",signed);$("appView").classList.toggle("hidden",!signed);$("headerUser").textContent=signed?currentUser.email:"";}
+async function authSubmit(e){
+ e.preventDefault();const email=$("email").value.trim(),password=$("password").value;message("authMessage","Bitte warten …");
+ const result=isRegister?await db.auth.signUp({email,password}):await db.auth.signInWithPassword({email,password});
+ if(result.error){message("authMessage",result.error.message,"error");return;}
+ if(isRegister&&!result.data.session){message("authMessage","Konto angelegt. Bitte bestätige deine E-Mail-Adresse und melde dich danach an.","success");return;}
+ currentUser=result.data.user;setAuthView(true);await loadAll();
 }
-document.getElementById("generate").addEventListener("click",generate);
-document.getElementById("print").addEventListener("click",()=>{if(generate())window.print();});
-input.addEventListener("keydown",event=>{if(event.key==="Enter")generate();});
-generate();
-
-let scanner=null;
-const scanStatus=document.getElementById("scanStatus");
-const scanValue=document.getElementById("scanValue");
-function stopScanner(){
- if(scanner){
-  const active=scanner;
-  scanner=null;
-  active.clear().catch(()=>{});
- }
- document.getElementById("startScan").disabled=false;
- document.getElementById("stopScan").disabled=true;
+$("authForm").addEventListener("submit",authSubmit);
+$("toggleAuth").addEventListener("click",()=>{isRegister=!isRegister;$("authSubmit").textContent=isRegister?"Konto erstellen":"Anmelden";$("toggleAuth").textContent=isRegister?"Zurück zur Anmeldung":"Noch kein Konto? Registrieren";$("password").autocomplete=isRegister?"new-password":"current-password";});
+async function signOut(){await db.auth.signOut();currentUser=null;setAuthView(false);}
+$("headerUser").addEventListener("click",signOut);
+db.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;setAuthView(!!currentUser);if(currentUser)loadAll();});
+async function loadAll(){
+ const [a,b,c,d]=await Promise.all([
+  db.from("inventory_items").select("*").order("name"),
+  db.from("inventory_categories").select("*").order("sort_order").order("name"),
+  db.from("inventory_locations").select("*").order("name"),
+  db.from("inventory_movements").select("*").order("created_at",{ascending:false}).limit(100)
+ ]);
+ const err=[a,b,c,d].find(x=>x.error);if(err){console.error(err.error);return;}
+ items=a.data||[];categories=b.data||[];locations=c.data||[];movements=d.data||[];
+ renderAll();
 }
-document.getElementById("startScan").addEventListener("click",async()=>{
- if(!window.Html5QrcodeScanner){
-  scanStatus.textContent="Scanner-Bibliothek konnte nicht geladen werden. Internetverbindung prüfen.";
-  scanStatus.classList.add("error");
-  return;
- }
- document.getElementById("startScan").disabled=true;
- scanStatus.textContent="Kamera wird gestartet …";
- scanStatus.classList.remove("error");
- try{
-  scanner=new Html5Qrcode("reader");
-  await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:150}},
-   decoded=>{
-    scanValue.textContent=decoded;
-    scanStatus.textContent="Barcode erfolgreich erkannt.";
-    stopScanner();
-   },
-   ()=>{}
-  );
-  document.getElementById("stopScan").disabled=false;
-  scanStatus.textContent="Kamera aktiv. Halte einen Barcode vor die Kamera.";
- }catch(error){
-  scanner=null;
-  document.getElementById("startScan").disabled=false;
-  scanStatus.textContent="Kamera konnte nicht gestartet werden. Berechtigung und HTTPS-Verbindung prüfen.";
-  scanStatus.classList.add("error");
- }
+function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();}
+function renderSelects(){
+ const opts=(arr,first)=>first+arr.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
+ $("itemCategory").innerHTML=opts(categories,'<option value="">Ohne Kategorie</option>');
+ $("filterCategory").innerHTML=opts(categories,'<option value="">Alle Kategorien</option>');
+ $("itemLocation").innerHTML=opts(locations,'<option value="">Noch kein Lagerort</option>');
+ $("locationParent").innerHTML=opts(locations,'<option value="">Keiner (oberste Ebene)</option>');
+ $("movementLocation").innerHTML=opts(locations,'<option value="">Aktuellen Ort beibehalten</option>');
+}
+function renderStats(){
+ $("statItems").textContent=items.length;$("statQuantity").textContent=fmt(items.reduce((s,x)=>s+Number(x.quantity),0));$("statLocations").textContent=locations.length;
+ $("statLow").textContent=items.filter(x=>Number(x.min_quantity)>0&&Number(x.quantity)<=Number(x.min_quantity)).length;
+}
+function renderItems(){
+ let rows=[...items],q=$("searchItems").value.toLowerCase(),filter=$("filterCategory").value,sort=$("sortItems").value;
+ rows=rows.filter(x=>(!filter||x.category_id===filter)&&(!q||[x.name,x.barcode,x.manufacturer,x.model,x.serial_number].some(v=>String(v||"").toLowerCase().includes(q))));
+ rows.sort((a,b)=>{let av,bv;switch(sort){case"barcode":av=a.barcode;bv=b.barcode;break;case"category":av=categoryName(a.category_id);bv=categoryName(b.category_id);break;case"location":av=locationName(a.location_id);bv=locationName(b.location_id);break;case"quantity":return Number(b.quantity)-Number(a.quantity);case"status":av=a.status;bv=b.status;break;case"updated":return new Date(b.updated_at)-new Date(a.updated_at);default:av=a.name;bv=b.name;}return String(av||"").localeCompare(String(bv||""),"de");});
+ $("itemsTable").innerHTML=rows.length?'<table><thead><tr><th>Artikel</th><th>Barcode</th><th>Kategorie</th><th>Lagerort</th><th>Bestand</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b><div class="muted">'+esc([x.manufacturer,x.model].filter(Boolean).join(" · "))+'</div></td><td><code>'+esc(x.barcode)+'</code></td><td>'+esc(categoryName(x.category_id))+'</td><td>'+esc(locationName(x.location_id))+'</td><td>'+fmt(x.quantity)+' '+esc(x.unit)+(Number(x.min_quantity)>0&&Number(x.quantity)<=Number(x.min_quantity)?' <span class="pill warn">Niedrig</span>':'')+'</td><td><span class="pill '+(x.status==="available"?"good":x.status==="defective"?"bad":"warn")+'">'+esc(statusName(x.status))+'</span></td><td><div class="actions"><button class="smallbtn" data-move="'+x.id+'">Buchen</button><button class="smallbtn secondary" data-print="'+x.id+'">Etikett</button></div></td></tr>').join("")+'</tbody></table>':'<div class="empty">Keine passenden Artikel gefunden. Lege oben deinen ersten Artikel an.</div>';
+ $("itemsTable").querySelectorAll("[data-move]").forEach(b=>b.addEventListener("click",()=>openMovement(b.dataset.move)));
+ $("itemsTable").querySelectorAll("[data-print]").forEach(b=>b.addEventListener("click",()=>printItemBarcode(b.dataset.print)));
+}
+function renderRecent(){const rows=[...items].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,5);$("recentItems").innerHTML=rows.length?'<table><tr><th>Artikel</th><th>Barcode</th><th>Lagerort</th></tr>'+rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.barcode)+'</td><td>'+esc(locationName(x.location_id))+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Artikel angelegt.</div>';}
+function renderCategories(){$("categoryList").innerHTML=categories.length?'<table><tr><th>Kategorie</th><th>Übergeordnet</th><th>Artikel</th></tr>'+categories.map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+esc(categories.find(p=>p.id===c.parent_id)?.name||"—")+'</td><td>'+items.filter(i=>i.category_id===c.id).length+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Kategorien.</div>';}
+function locPath(id){let x=locations.find(l=>l.id===id),parts=[],guard=0;while(x&&guard++<10){parts.unshift(x.name);x=locations.find(l=>l.id===x.parent_id);}return parts.join(" / ");}
+function renderLocations(){$("locationList").innerHTML=locations.length?'<table><tr><th>Lagerort</th><th>Beschreibung</th><th>Artikel</th></tr>'+locations.map(l=>'<tr><td>'+esc(locPath(l.id))+'</td><td>'+esc(l.description||"—")+'</td><td>'+items.filter(i=>i.location_id===l.id).length+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Lagerorte angelegt.</div>';}
+function renderHistory(){
+ const names=new Map(items.map(x=>[x.id,x.name]));$("historyTable").innerHTML=movements.length?'<table><tr><th>Zeit</th><th>Artikel</th><th>Vorgang</th><th>Menge</th><th>Von → Nach</th><th>Notiz</th></tr>'+movements.map(m=>'<tr><td>'+new Date(m.created_at).toLocaleString("de-DE")+'</td><td>'+esc(names.get(m.item_id)||"Artikel")+'</td><td>'+({in:"Einlagerung",out:"Auslagerung",move:"Umlagerung",adjustment:"Korrektur"}[m.movement_type]||m.movement_type)+'</td><td>'+fmt(m.quantity)+'</td><td>'+esc(locationName(m.from_location_id))+' → '+esc(locationName(m.to_location_id))+'</td><td>'+esc(m.note||"—")+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Lagerbewegungen.</div>';
+}
+$("itemForm").addEventListener("submit",async e=>{
+ e.preventDefault();const payload={name:$("itemName").value.trim(),barcode:$("itemBarcode").value.trim(),category_id:$("itemCategory").value||null,location_id:$("itemLocation").value||null,quantity:Number($("itemQuantity").value),unit:$("itemUnit").value.trim()||"Stück",item_type:$("itemType").value,condition:$("itemCondition").value,status:$("itemStatus").value,min_quantity:Number($("itemMin").value||0),manufacturer:$("itemManufacturer").value.trim()||null,model:$("itemModel").value.trim()||null,serial_number:$("itemSerial").value.trim()||null,description:$("itemDescription").value.trim()||null};
+ const {error}=await db.from("inventory_items").insert(payload);if(error){message("itemMessage",error.message,"error");return;}
+ message("itemMessage","Artikel gespeichert.","success");e.target.reset();$("itemQuantity").value=1;$("itemUnit").value="Stück";$("itemMin").value=0;await loadAll();
 });
-document.getElementById("stopScan").addEventListener("click",stopScanner);
+$("makeBarcode").addEventListener("click",()=>{$("itemBarcode").value="SL"+Date.now().toString().slice(-10);});
+$("searchItems").addEventListener("input",renderItems);$("sortItems").addEventListener("change",renderItems);$("filterCategory").addEventListener("change",renderItems);
+$("categoryForm").addEventListener("submit",async e=>{e.preventDefault();const name=$("categoryName").value.trim();const {error}=await db.from("inventory_categories").insert({name});if(error){alert(error.message);return;}e.target.reset();await loadAll();});
+$("locationForm").addEventListener("submit",async e=>{e.preventDefault();const payload={name:$("locationName").value.trim(),parent_id:$("locationParent").value||null,description:$("locationDescription").value.trim()||null};const {error}=await db.from("inventory_locations").insert(payload);if(error){message("locationMessage",error.message,"error");return;}e.target.reset();message("locationMessage","Lagerort gespeichert.","success");await loadAll();});
+function openMovement(id){
+ const item=items.find(x=>x.id===id);if(!item)return;$("movementItemId").value=id;$("movementItem").textContent=item.name+" · "+item.barcode+" · Bestand: "+fmt(item.quantity)+" "+item.unit;$("movementQty").value=1;$("movementNote").value="";$("movementType").value="in";$("movementMessage").textContent="";$("movementDialog").showModal();
+}
+$("movementType").addEventListener("change",()=>{$("movementQtyWrap").classList.toggle("hidden",$("movementType").value==="move");});
+$("cancelMovement").addEventListener("click",()=>$("movementDialog").close());
+$("movementForm").addEventListener("submit",async e=>{
+ e.preventDefault();const type=$("movementType").value,id=$("movementItemId").value,qty=Number($("movementQty").value),to=$("movementLocation").value||null;
+ const {error}=await db.rpc("record_inventory_movement",{p_item_id:id,p_movement_type:type,p_quantity:type==="move"?1:qty,p_to_location_id:to,p_note:$("movementNote").value.trim()||null});
+ if(error){message("movementMessage",error.message,"error");return;}$("movementDialog").close();await loadAll();
+});
+$("tabs").addEventListener("click",e=>{const tab=e.target.dataset.tab;if(tab)showTab(tab);});
+document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.goto)));
+function showTab(tab){document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));["dashboard","items","categories","locations","history","tools"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==tab));}
+function lookup(value){
+ const item=items.find(x=>x.barcode.toLowerCase()===value.trim().toLowerCase());$("scanResult").classList.remove("hidden");
+ $("scanResult").innerHTML=item?'<b>'+esc(item.name)+'</b><p class="small">Barcode: '+esc(item.barcode)+'<br>Kategorie: '+esc(categoryName(item.category_id))+'<br>Lagerort: '+esc(locationName(item.location_id))+'<br>Bestand: '+fmt(item.quantity)+' '+esc(item.unit)+'<br>Status: '+esc(statusName(item.status))+'</p><button id="scanBook">Lagerbewegung buchen</button>':'<b>Kein Artikel gefunden</b><p class="small">Für den Barcode '+esc(value)+' ist noch kein Artikel gespeichert.</p>';
+ if(item)$("scanBook").addEventListener("click",()=>openMovement(item.id));
+}
+$("lookupBarcode").addEventListener("click",()=>lookup($("manualScan").value));$("manualScan").addEventListener("keydown",e=>{if(e.key==="Enter")lookup(e.target.value);});
+function stopScan(){if(scanner){const s=scanner;scanner=null;s.stop().catch(()=>{}).finally(()=>s.clear().catch(()=>{}));}$("startScan").disabled=false;$("stopScan").disabled=true;}
+$("startScan").addEventListener("click",async()=>{
+ if(!window.Html5Qrcode){$("scanStatus").textContent="Scanner-Bibliothek konnte nicht geladen werden.";return;}
+ $("startScan").disabled=true;$("scanStatus").textContent="Kamera wird gestartet …";
+ try{scanner=new Html5Qrcode("reader");await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:150}},decoded=>{$("manualScan").value=decoded;$("scanStatus").textContent="Barcode erkannt." ;stopScan();lookup(decoded);},()=>{});$("stopScan").disabled=false;$("scanStatus").textContent="Kamera aktiv – Barcode vor die Kamera halten.";}
+ catch(err){scanner=null;$("startScan").disabled=false;$("scanStatus").textContent="Kamera konnte nicht gestartet werden. HTTPS und Kameraberechtigung prüfen.";}
+});
+$("stopScan").addEventListener("click",stopScan);
+function generateBarcode(value){if(!value.trim())throw new Error("Bitte einen Barcode-Inhalt eingeben.");JsBarcode("#barcodeSvg",value.trim(),{format:"CODE128",lineColor:"#111",background:"#fff",width:2,height:90,displayValue:false,margin:8});$("barcodeText").textContent=value.trim();}
+$("generateBarcode").addEventListener("click",()=>{try{generateBarcode($("generatorInput").value);message("generatorStatus","Code-128-Barcode erfolgreich erzeugt.","success");}catch(e){message("generatorStatus",e.message,"error");}});
+$("printBarcode").addEventListener("click",()=>{try{generateBarcode($("generatorInput").value);window.print();}catch(e){message("generatorStatus",e.message,"error");}});
+function printItemBarcode(id){const item=items.find(x=>x.id===id);if(!item)return;$("generatorInput").value=item.barcode;showTab("tools");generateBarcode(item.barcode);window.print();}
+generateBarcode("SL000001");
+db.auth.getSession().then(({data})=>{currentUser=data.session?.user||null;setAuthView(!!currentUser);if(currentUser)loadAll();});
 </script>
 </body>
 </html>
