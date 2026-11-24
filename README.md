@@ -1,18 +1,21 @@
-# Scan Test
+# Barcode-Generator
 
-Kleine, eigenständige Test-Webseite zum Erfassen von Barcodes mit der Handykamera.
+Eigenständiger Barcode-Generator für das Veranstaltungstechnik-Lager an der Schule.
 
 ## Aktueller Stand
 
-- Kamera-Scanner im Browser mit html5-qrcode
-- Zeigt den erkannten Barcode-Text direkt auf der Seite an
-- Keine Anmeldung und keine Datenbank
-- Noch keine Speicherung von Scans
+- Erzeugt echte Code-128-Barcodes aus eingegebenen Kennungen
+- Vorschau im Browser
+- Druckfunktion für Etiketten
+- Keine Anmeldung und noch keine Datenbank
 
-## Lokal testen
+## Geplanter Einsatz
 
-Die Seite benötigt eine sichere Browser-Umgebung für den Kamerazugriff. Lokal kann sie über `localhost` getestet werden; online muss sie über HTTPS bereitgestellt werden.
+1. Eine Kennung für ein Gerät eingeben und den Barcode erzeugen.
+2. Barcode ausdrucken und am Gerät oder Case befestigen.
+3. Mit einem USB- oder Bluetooth-Barcodescanner einlesen.
+4. Die spätere Software auf einem Raspberry Pi verarbeitet die gelesene Kennung und sucht den passenden Lagerartikel.
 
-## Bibliothek
+## Technischer Hinweis
 
-Die Seite lädt html5-qrcode 2.3.8 über jsDelivr/unpkg CDN. Für den Betrieb ist eine Internetverbindung erforderlich.
+Die Seite lädt JsBarcode 3.11.6 über jsDelivr. Zum Erzeugen der Barcodes ist daher derzeit eine Internetverbindung erforderlich. Die Lagerdatenbank und Raspberry-Pi-Anbindung sind noch nicht enthalten.
