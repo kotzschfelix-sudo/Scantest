@@ -239,13 +239,39 @@ function renderCategories(){$("categoryList").innerHTML=categories.length?'<tabl
 function locPath(id){let x=locations.find(l=>l.id===id),parts=[],guard=0;while(x&&guard++<10){parts.unshift(x.name);x=locations.find(l=>l.id===x.parent_id);}return parts.join(" / ");}
 function renderLocations(){$("locationList").innerHTML=locations.length?'<table><tr><th>Lagerort</th><th>Beschreibung</th><th>Artikel</th></tr>'+locations.map(l=>'<tr><td>'+esc(locPath(l.id))+'</td><td>'+esc(l.description||"—")+'</td><td>'+items.filter(i=>i.location_id===l.id).length+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Lagerorte angelegt.</div>';}
 function renderHistory(){
- const names=new Map(items.map(x=>[x.id,x.name]));$("historyTable").innerHTML=movements.length?'<table><tr><th>Zeit</th><th>Artikel</th><th>Vorgang</th><th>Menge</th><th>Von → Nach</th><th>Notiz</th></tr>'+movements.map(m=>'<tr><td>'+new Date(m.created_at).toLocaleString("de-DE")+'</td><td>'+esc(names.get(m.item_id)||"Artikel")+'</td><td>'+({in:"Einlagerung",out:"Auslagerung",move:"Umlagerung",adjustment:"Korrektur"}[m.movement_type]||m.movement_type)+'</td><td>'+fmt(m.quantity)+'</td><td>'+esc(locationName(m.from_location_id))+' → '+esc(locationName(m.to_location_id))+'</td><td>'+esc(m.note||"—")+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Lagerbewegungen.</div>';
+ const names=new Map(allItems.map(x=>[x.id,x.name]));$("historyTable").innerHTML=movements.length?'<table><tr><th>Zeit</th><th>Artikel</th><th>Vorgang</th><th>Menge</th><th>Von → Nach</th><th>Notiz</th></tr>'+movements.map(m=>'<tr><td>'+new Date(m.created_at).toLocaleString("de-DE")+'</td><td>'+esc(names.get(m.item_id)||"Artikel")+'</td><td>'+({in:"Einlagerung",out:"Auslagerung",move:"Umlagerung",adjustment:"Korrektur"}[m.movement_type]||m.movement_type)+'</td><td>'+fmt(m.quantity)+'</td><td>'+esc(locationName(m.from_location_id))+' → '+esc(locationName(m.to_location_id))+'</td><td>'+esc(m.note||"—")+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Lagerbewegungen.</div>';
+}
+function resetItemForm(){
+ editingItemId=null;
+ $("itemForm").reset();$("itemQuantity").value=1;$("itemUnit").value="Stück";$("itemMin").value=0;
+ $("itemFormTitle").textContent="Artikel hinzufügen";$("saveItemBtn").textContent="Artikel speichern";$("cancelEdit").classList.add("hidden");
+}
+function startEdit(id){
+ const x=items.find(v=>v.id===id);if(!x)return;
+ editingItemId=id;
+ $("itemName").value=x.name;$("itemBarcode").value=x.barcode;$("itemCategory").value=x.category_id||"";$("itemLocation").value=x.location_id||"";
+ $("itemQuantity").value=x.quantity;$("itemUnit").value=x.unit;$("itemType").value=x.item_type;$("itemCondition").value=x.condition;
+ $("itemStatus").value=x.status;$("itemMin").value=x.min_quantity;$("itemManufacturer").value=x.manufacturer||"";$("itemModel").value=x.model||"";
+ $("itemSerial").value=x.serial_number||"";$("itemDescription").value=x.description||"";
+ $("itemFormTitle").textContent="Artikel bearbeiten";$("saveItemBtn").textContent="Änderungen speichern";$("cancelEdit").classList.remove("hidden");showTab("items");$("itemName").focus();
+}
+async function archiveItem(id){
+ const x=items.find(v=>v.id===id);if(!x)return;
+ if(!confirm("Artikel '"+x.name+"' archivieren? Er verschwindet aus dem aktiven Bestand; Bewegungs- und Ausleihhistorie bleibt erhalten."))return;
+ const {error}=await db.from("inventory_items").update({archived_at:new Date().toISOString()}).eq("id",id);
+ if(error){alert(error.message);return;}
+ if(editingItemId===id)resetItemForm();
+ selectedLabels.delete(id);await loadAll();
 }
 $("itemForm").addEventListener("submit",async e=>{
- e.preventDefault();const payload={name:$("itemName").value.trim(),barcode:$("itemBarcode").value.trim(),category_id:$("itemCategory").value||null,location_id:$("itemLocation").value||null,quantity:Number($("itemQuantity").value),unit:$("itemUnit").value.trim()||"Stück",item_type:$("itemType").value,condition:$("itemCondition").value,status:$("itemStatus").value,min_quantity:Number($("itemMin").value||0),manufacturer:$("itemManufacturer").value.trim()||null,model:$("itemModel").value.trim()||null,serial_number:$("itemSerial").value.trim()||null,description:$("itemDescription").value.trim()||null};
- const {error}=await db.from("inventory_items").insert(payload);if(error){message("itemMessage",error.message,"error");return;}
- message("itemMessage","Artikel gespeichert.","success");e.target.reset();$("itemQuantity").value=1;$("itemUnit").value="Stück";$("itemMin").value=0;await loadAll();
+ e.preventDefault();
+ const payload={name:$("itemName").value.trim(),barcode:$("itemBarcode").value.trim(),category_id:$("itemCategory").value||null,location_id:$("itemLocation").value||null,quantity:Number($("itemQuantity").value),unit:$("itemUnit").value.trim()||"Stück",item_type:$("itemType").value,condition:$("itemCondition").value,status:$("itemStatus").value,min_quantity:Number($("itemMin").value||0),manufacturer:$("itemManufacturer").value.trim()||null,model:$("itemModel").value.trim()||null,serial_number:$("itemSerial").value.trim()||null,description:$("itemDescription").value.trim()||null};
+ const query=editingItemId?db.from("inventory_items").update(payload).eq("id",editingItemId):db.from("inventory_items").insert(payload);
+ const {error}=await query;
+ if(error){message("itemMessage",error.message,"error");return;}
+ message("itemMessage",editingItemId?"Änderungen gespeichert.":"Artikel gespeichert.","success");resetItemForm();await loadAll();
 });
+$("cancelEdit").addEventListener("click",resetItemForm);
 $("makeBarcode").addEventListener("click",()=>{$("itemBarcode").value="SL"+Date.now().toString().slice(-10);});
 $("searchItems").addEventListener("input",renderItems);$("sortItems").addEventListener("change",renderItems);$("filterCategory").addEventListener("change",renderItems);
 $("categoryForm").addEventListener("submit",async e=>{e.preventDefault();const name=$("categoryName").value.trim();const {error}=await db.from("inventory_categories").insert({name});if(error){alert(error.message);return;}e.target.reset();await loadAll();});
@@ -260,15 +286,61 @@ $("movementForm").addEventListener("submit",async e=>{
  const {error}=await db.rpc("record_inventory_movement",{p_item_id:id,p_movement_type:type,p_quantity:type==="move"?1:qty,p_to_location_id:to,p_note:$("movementNote").value.trim()||null});
  if(error){message("movementMessage",error.message,"error");return;}$("movementDialog").close();await loadAll();
 });
+$("loanForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const itemId=$("loanItemId").value,qty=Number($("loanQuantity").value),due=$("loanDue").value?new Date($("loanDue").value+"T23:59:00").toISOString():null;
+ const {error}=await db.rpc("checkout_inventory_item",{p_item_id:itemId,p_quantity:qty,p_borrower_name:$("loanBorrower").value.trim(),p_borrower_group:$("loanGroup").value.trim()||null,p_due_at:due,p_note:$("loanNote").value.trim()||null});
+ if(error){message("loanMessage",error.message,"error");return;}
+ $("loanDialog").close();e.target.reset();await loadAll();showTab("loans");
+});
+function openLoan(id){
+ const item=items.find(x=>x.id===id);if(!item)return;
+ $("loanItemId").value=id;$("loanItemInfo").textContent=item.name+" · Bestand: "+fmt(item.quantity)+" "+item.unit;
+ $("loanQuantity").value=1;$("loanQuantity").max=item.quantity;$("loanBorrower").value="";$("loanGroup").value="";$("loanDue").value="";$("loanNote").value="";$("loanDialog").showModal();
+}
+$("cancelLoan").addEventListener("click",()=>$("loanDialog").close());
+function renderLoans(){
+ const itemMap=new Map(allItems.map(x=>[x.id,x]));
+ $("loansTable").innerHTML=loans.length?'<table><tr><th>Artikel</th><th>Empfänger</th><th>Ausgeliehen</th><th>Rückgabe bis</th><th>Offen</th><th>Status</th><th>Aktion</th></tr>'+loans.map(l=>{
+   const x=itemMap.get(l.item_id),remaining=Number(l.quantity)-Number(l.returned_quantity||0),isOpen=l.status==="active"&&remaining>0,overdue=isOpen&&l.due_at&&new Date(l.due_at)<new Date();
+   const state=isOpen?(overdue?'<span class="pill bad">Überfällig</span>':'<span class="pill warn">Ausgeliehen</span>'):'<span class="pill good">Zurückgegeben</span>';
+   return '<tr><td><b>'+esc(x?.name||"Archivierter Artikel")+'</b><div class="muted">'+esc(x?.barcode||"")+'</div></td><td>'+esc(l.borrower_name)+(l.borrower_group?'<div class="muted">'+esc(l.borrower_group)+'</div>':'')+'</td><td>'+new Date(l.borrowed_at).toLocaleDateString("de-DE")+'</td><td>'+(l.due_at?new Date(l.due_at).toLocaleDateString("de-DE"):"—")+'</td><td>'+fmt(remaining)+' '+esc(x?.unit||"Stück")+'</td><td>'+state+'</td><td>'+(isOpen&&canManage()?'<button class="smallbtn" data-return="'+l.id+'">Rückgabe</button>':"—")+'</td></tr>';
+ }).join("")+'</table>':'<div class="empty">Noch keine Ausleihen erfasst.</div>';
+ $("loansTable").querySelectorAll("[data-return]").forEach(b=>b.addEventListener("click",()=>openReturn(b.dataset.return)));
+}
+function openReturn(id){
+ const l=loans.find(x=>x.id===id);if(!l)return;
+ const x=allItems.find(v=>v.id===l.item_id),remaining=Number(l.quantity)-Number(l.returned_quantity||0);
+ $("returnLoanId").value=id;$("returnLoanInfo").textContent=(x?.name||"Artikel")+" · "+l.borrower_name+" · Noch offen: "+fmt(remaining);
+ $("returnQuantity").value=remaining;$("returnQuantity").max=remaining;$("returnNote").value="";$("returnDialog").showModal();
+}
+$("cancelReturn").addEventListener("click",()=>$("returnDialog").close());
+$("returnForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const {error}=await db.rpc("return_inventory_loan",{p_loan_id:$("returnLoanId").value,p_quantity:Number($("returnQuantity").value),p_note:$("returnNote").value.trim()||null});
+ if(error){message("returnMessage",error.message,"error");return;}
+ $("returnDialog").close();await loadAll();showTab("loans");
+});
+function renderUsers(){
+ if(currentRole!=="admin")return;
+ const roles=["pending","viewer","helper","manager","admin"];
+ const roleLabelFor=r=>({pending:"Wartet auf Freigabe",viewer:"Nur lesen",helper:"Helfer",manager:"Lagerleitung",admin:"Admin"}[r]||r);
+ $("userRoleTable").innerHTML=userRoles.length?'<table><tr><th>E-Mail</th><th>Rolle</th><th>Seit</th></tr>'+userRoles.map(u=>'<tr><td>'+esc(u.email||u.user_id)+'</td><td><select data-user-role="'+u.user_id+'">'+roles.map(r=>'<option value="'+r+'" '+(u.role===r?'selected':'')+'>'+roleLabelFor(r)+'</option>').join("")+'</select></td><td>'+new Date(u.created_at).toLocaleDateString("de-DE")+'</td></tr>').join("")+'</table>':'<div class="empty">Keine Konten gefunden.</div>';
+ $("userRoleTable").querySelectorAll("[data-user-role]").forEach(sel=>sel.addEventListener("change",async()=>{
+   const {error}=await db.from("inventory_user_roles").update({role:sel.value}).eq("user_id",sel.dataset.userRole);
+   if(error){alert(error.message);await loadAll();return;}
+   await loadAll();
+ }));
+}
 $("tabs").addEventListener("click",e=>{const tab=e.target.dataset.tab;if(tab)showTab(tab);});
 document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.goto)));
-function showTab(tab){document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));["dashboard","items","categories","locations","history","tools"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==tab));}
+function showTab(tab){if(tab==="users"&&currentRole!=="admin")return;document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));["dashboard","items","categories","locations","history","loans","users","tools"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==tab));}
 function lookup(value){
  const item=items.find(x=>x.barcode.toLowerCase()===value.trim().toLowerCase());$("scanResult").classList.remove("hidden");
  $("scanResult").innerHTML=item?'<b>'+esc(item.name)+'</b><p class="small">Barcode: '+esc(item.barcode)+'<br>Kategorie: '+esc(categoryName(item.category_id))+'<br>Lagerort: '+esc(locationName(item.location_id))+'<br>Bestand: '+fmt(item.quantity)+' '+esc(item.unit)+'<br>Status: '+esc(statusName(item.status))+'</p><button id="scanBook">Lagerbewegung buchen</button>':'<b>Kein Artikel gefunden</b><p class="small">Für den Barcode '+esc(value)+' ist noch kein Artikel gespeichert.</p>';
  if(item)$("scanBook").addEventListener("click",()=>openMovement(item.id));
 }
-$("lookupBarcode").addEventListener("click",()=>lookup($("manualScan").value));$("manualScan").addEventListener("keydown",e=>{if(e.key==="Enter")lookup(e.target.value);});
+$("lookupBarcode").addEventListener("click",()=>lookup($("manualScan").value));$("manualScan").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();lookup(e.target.value);e.target.select();}});$("focusScannerInput").addEventListener("click",()=>{$("manualScan").focus();$("scanStatus").textContent="USB-Scanner bereit. Barcode scannen; der Scanner sollte am Ende Enter senden.";});
 function stopScan(){if(scanner){const s=scanner;scanner=null;s.stop().catch(()=>{}).finally(()=>s.clear().catch(()=>{}));}$("startScan").disabled=false;$("stopScan").disabled=true;}
 $("startScan").addEventListener("click",async()=>{
  if(!window.Html5Qrcode){$("scanStatus").textContent="Scanner-Bibliothek konnte nicht geladen werden.";return;}
@@ -278,9 +350,16 @@ $("startScan").addEventListener("click",async()=>{
 });
 $("stopScan").addEventListener("click",stopScan);
 function generateBarcode(value){if(!value.trim())throw new Error("Bitte einen Barcode-Inhalt eingeben.");JsBarcode("#barcodeSvg",value.trim(),{format:"CODE128",lineColor:"#111",background:"#fff",width:2,height:90,displayValue:false,margin:8});$("barcodeText").textContent=value.trim();}
+function printLabelList(rows){
+ const area=$("labelPrintArea");if(!rows.length)return;
+ area.innerHTML=rows.map((x,i)=>'<div class="print-label"><div class="print-name">'+esc(x.name)+'</div><svg id="print-barcode-'+i+'"></svg><div class="print-code">'+esc(x.barcode)+'</div><div class="print-brand">SCHULLAGER</div></div>').join("");
+ rows.forEach((x,i)=>JsBarcode("#print-barcode-"+i,x.barcode,{format:"CODE128",lineColor:"#111",background:"#fff",width:1.7,height:48,displayValue:false,margin:2}));
+ window.print();
+}
 $("generateBarcode").addEventListener("click",()=>{try{generateBarcode($("generatorInput").value);message("generatorStatus","Code-128-Barcode erfolgreich erzeugt.","success");}catch(e){message("generatorStatus",e.message,"error");}});
-$("printBarcode").addEventListener("click",()=>{try{generateBarcode($("generatorInput").value);window.print();}catch(e){message("generatorStatus",e.message,"error");}});
-function printItemBarcode(id){const item=items.find(x=>x.id===id);if(!item)return;$("generatorInput").value=item.barcode;showTab("tools");generateBarcode(item.barcode);window.print();}
+$("printBarcode").addEventListener("click",()=>{try{const value=$("generatorInput").value.trim();generateBarcode(value);printLabelList([{name:"Manueller Barcode",barcode:value}]);}catch(e){message("generatorStatus",e.message,"error");}});
+function printItemBarcode(id){const item=items.find(x=>x.id===id);if(item)printLabelList([item]);}
+$("printSelectedLabels").addEventListener("click",()=>{const rows=items.filter(x=>selectedLabels.has(x.id));printLabelList(rows);});
 generateBarcode("SL000001");
 db.auth.getSession().then(({data})=>{currentUser=data.session?.user||null;setAuthView(!!currentUser);if(currentUser)loadAll();});
 </script>
