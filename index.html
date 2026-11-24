@@ -157,7 +157,10 @@ const locationName = id => locations.find(x=>x.id===id)?.name || "Kein Lagerort"
 const statusName = s => ({available:"Verfügbar",checked_out:"Ausgegeben",maintenance:"In Reparatur",lost:"Vermisst"}[s]||s);
 const conditionName = s => ({new:"Neu",good:"Gut",used:"Gebraucht",defective:"Defekt"}[s]||s);
 function message(id,text,kind=""){const el=$(id);el.textContent=text;el.className="small "+kind;}
-function setAuthView(signed){$("authView").classList.toggle("hidden",signed);$("appView").classList.toggle("hidden",!signed);$("headerUser").textContent=signed?currentUser.email:"";$("signOutBtn").classList.toggle("hidden",!signed);}
+function setAuthView(signed){$("authView").classList.toggle("hidden",signed);$("appView").classList.toggle("hidden",!signed);$("headerUser").textContent=signed?(currentUser.email+" · "+roleLabel(currentRole)):"";$("signOutBtn").classList.toggle("hidden",!signed);}
+function roleLabel(role){return ({admin:"Admin",manager:"Lagerleitung",helper:"Helfer",viewer:"Nur lesen",pending:"Wartet auf Freigabe"}[role]||role);}
+function canManage(){return ["admin","manager","helper"].includes(currentRole);}
+function canAdminister(){return ["admin","manager"].includes(currentRole);}
 async function authSubmit(e){
  e.preventDefault();const email=$("email").value.trim(),password=$("password").value;message("authMessage","Bitte warten …");
  const result=isRegister?await db.auth.signUp({email,password}):await db.auth.signInWithPassword({email,password});
@@ -171,17 +174,34 @@ async function signOut(){await db.auth.signOut();currentUser=null;setAuthView(fa
 $("signOutBtn").addEventListener("click",signOut);
 db.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;setAuthView(!!currentUser);if(currentUser)loadAll();});
 async function loadAll(){
- const [a,b,c,d]=await Promise.all([
+ const roleResult=await db.from("inventory_user_roles").select("*");
+ if(roleResult.error){console.error(roleResult.error);message("authMessage","Benutzerrolle konnte nicht geladen werden: "+roleResult.error.message,"error");return;}
+ userRoles=roleResult.data||[];
+ currentRole=userRoles.find(x=>x.user_id===currentUser?.id)?.role||"pending";
+ $("headerUser").textContent=currentUser?currentUser.email+" · "+roleLabel(currentRole):"";
+ $("pendingAccess").classList.toggle("hidden",currentRole!=="pending");
+ $("tabs").classList.toggle("hidden",currentRole==="pending");
+ $("usersTab").classList.toggle("hidden",currentRole!=="admin");
+ if(currentRole==="pending"){
+   ["dashboard","items","categories","locations","history","loans","users","tools"].forEach(t=>$("tab-"+t).classList.add("hidden"));
+   return;
+ }
+ const [a,b,c,d,e]=await Promise.all([
   db.from("inventory_items").select("*").order("name"),
   db.from("inventory_categories").select("*").order("sort_order").order("name"),
   db.from("inventory_locations").select("*").order("name"),
-  db.from("inventory_movements").select("*").order("created_at",{ascending:false}).limit(100)
+  db.from("inventory_movements").select("*").order("created_at",{ascending:false}).limit(100),
+  db.from("inventory_loans").select("*").order("borrowed_at",{ascending:false}).limit(200)
  ]);
- const err=[a,b,c,d].find(x=>x.error);if(err){console.error(err.error);return;}
- items=a.data||[];categories=b.data||[];locations=c.data||[];movements=d.data||[];
+ const err=[a,b,c,d,e].find(x=>x.error);if(err){console.error(err.error);message("authMessage","Lagerdaten konnten nicht geladen werden: "+err.error.message,"error");return;}
+ allItems=a.data||[];items=allItems.filter(x=>!x.archived_at);
+ categories=b.data||[];locations=c.data||[];movements=d.data||[];loans=e.data||[];
+ $("itemFormPanel").classList.toggle("hidden",!canManage());
+ $("categoryForm").classList.toggle("hidden",!canManage());
+ $("locationForm").classList.toggle("hidden",!canManage());
  renderAll();
 }
-function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();}
+function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();renderLoans();renderUsers();}
 function renderSelects(){
  const opts=(arr,first)=>first+arr.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
  $("itemCategory").innerHTML=opts(categories,'<option value="">Ohne Kategorie</option>');
@@ -198,10 +218,22 @@ function renderItems(){
  let rows=[...items],q=$("searchItems").value.toLowerCase(),filter=$("filterCategory").value,sort=$("sortItems").value;
  rows=rows.filter(x=>(!filter||x.category_id===filter)&&(!q||[x.name,x.barcode,x.manufacturer,x.model,x.serial_number].some(v=>String(v||"").toLowerCase().includes(q))));
  rows.sort((a,b)=>{let av,bv;switch(sort){case"barcode":av=a.barcode;bv=b.barcode;break;case"category":av=categoryName(a.category_id);bv=categoryName(b.category_id);break;case"location":av=locationName(a.location_id);bv=locationName(b.location_id);break;case"quantity":return Number(b.quantity)-Number(a.quantity);case"status":av=a.status;bv=b.status;break;case"updated":return new Date(b.updated_at)-new Date(a.updated_at);default:av=a.name;bv=b.name;}return String(av||"").localeCompare(String(bv||""),"de");});
- $("itemsTable").innerHTML=rows.length?'<table><thead><tr><th>Artikel</th><th>Barcode</th><th>Kategorie</th><th>Lagerort</th><th>Bestand</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b><div class="muted">'+esc([x.manufacturer,x.model].filter(Boolean).join(" · "))+'</div></td><td><code>'+esc(x.barcode)+'</code></td><td>'+esc(categoryName(x.category_id))+'</td><td>'+esc(locationName(x.location_id))+'</td><td>'+fmt(x.quantity)+' '+esc(x.unit)+(Number(x.min_quantity)>0&&Number(x.quantity)<=Number(x.min_quantity)?' <span class="pill warn">Niedrig</span>':'')+'</td><td><span class="pill '+(x.status==="available"?"good":x.status==="defective"?"bad":"warn")+'">'+esc(statusName(x.status))+'</span></td><td><div class="actions"><button class="smallbtn" data-move="'+x.id+'">Buchen</button><button class="smallbtn secondary" data-print="'+x.id+'">Etikett</button></div></td></tr>').join("")+'</tbody></table>':'<div class="empty">Keine passenden Artikel gefunden. Lege oben deinen ersten Artikel an.</div>';
+ const actions=x=>'<div class="actions">'+
+   (canManage()?'<button class="smallbtn" data-move="'+x.id+'">Buchen</button><button class="smallbtn" data-loan="'+x.id+'">Ausleihen</button><button class="smallbtn secondary" data-edit="'+x.id+'">Bearbeiten</button>':'')+
+   (canAdminister()?'<button class="smallbtn danger" data-archive="'+x.id+'">Archivieren</button>':'')+
+   '<button class="smallbtn secondary" data-print="'+x.id+'">Etikett</button></div>';
+ $("itemsTable").innerHTML=rows.length?'<table><thead><tr><th><input id="selectAllLabels" type="checkbox" aria-label="Alle sichtbaren Artikel auswählen"></th><th>Artikel</th><th>Barcode</th><th>Kategorie</th><th>Lagerort</th><th>Bestand</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><input type="checkbox" class="label-check" data-label-select="'+x.id+'" aria-label="Etikett für '+esc(x.name)+' auswählen" '+(selectedLabels.has(x.id)?'checked':'')+'></td><td><b>'+esc(x.name)+'</b><div class="muted">'+esc([x.manufacturer,x.model].filter(Boolean).join(" · "))+'</div></td><td><code>'+esc(x.barcode)+'</code></td><td>'+esc(categoryName(x.category_id))+'</td><td>'+esc(locationName(x.location_id))+'</td><td>'+fmt(x.quantity)+' '+esc(x.unit)+(Number(x.min_quantity)>0&&Number(x.quantity)<=Number(x.min_quantity)?' <span class="pill warn">Niedrig</span>':'')+'</td><td><span class="pill '+(x.status==="available"?"good":x.status==="defective"?"bad":"warn")+'">'+esc(statusName(x.status))+'</span></td><td>'+actions(x)+'</td></tr>').join("")+'</tbody></table>':'<div class="empty">Keine passenden Artikel gefunden. Lege oben deinen ersten Artikel an.</div>';
  $("itemsTable").querySelectorAll("[data-move]").forEach(b=>b.addEventListener("click",()=>openMovement(b.dataset.move)));
+ $("itemsTable").querySelectorAll("[data-loan]").forEach(b=>b.addEventListener("click",()=>openLoan(b.dataset.loan)));
+ $("itemsTable").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>startEdit(b.dataset.edit)));
+ $("itemsTable").querySelectorAll("[data-archive]").forEach(b=>b.addEventListener("click",()=>archiveItem(b.dataset.archive)));
  $("itemsTable").querySelectorAll("[data-print]").forEach(b=>b.addEventListener("click",()=>printItemBarcode(b.dataset.print)));
+ $("itemsTable").querySelectorAll("[data-label-select]").forEach(cb=>cb.addEventListener("change",()=>{cb.checked?selectedLabels.add(cb.dataset.labelSelect):selectedLabels.delete(cb.dataset.labelSelect);updateBatchPrintButton();}));
+ const selectAll=$("selectAllLabels");
+ if(selectAll)selectAll.addEventListener("change",()=>{rows.forEach(x=>selectAll.checked?selectedLabels.add(x.id):selectedLabels.delete(x.id));renderItems();});
+ updateBatchPrintButton();
 }
+function updateBatchPrintButton(){const count=selectedLabels.size;const btn=$("printSelectedLabels");btn.disabled=count===0;btn.textContent="Etiketten drucken ("+count+")";}
 function renderRecent(){const rows=[...items].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,5);$("recentItems").innerHTML=rows.length?'<table><tr><th>Artikel</th><th>Barcode</th><th>Lagerort</th></tr>'+rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.barcode)+'</td><td>'+esc(locationName(x.location_id))+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Artikel angelegt.</div>';}
 function renderCategories(){$("categoryList").innerHTML=categories.length?'<table><tr><th>Kategorie</th><th>Übergeordnet</th><th>Artikel</th></tr>'+categories.map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+esc(categories.find(p=>p.id===c.parent_id)?.name||"—")+'</td><td>'+items.filter(i=>i.category_id===c.id).length+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Kategorien.</div>';}
 function locPath(id){let x=locations.find(l=>l.id===id),parts=[],guard=0;while(x&&guard++<10){parts.unshift(x.name);x=locations.find(l=>l.id===x.parent_id);}return parts.join(" / ");}
