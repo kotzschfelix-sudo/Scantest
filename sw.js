@@ -1,5 +1,5 @@
-const CACHE_NAME = "schullager-shell-v2";
-const SHELL = ["./", "./manifest.webmanifest", "./icon.svg"];
+const CACHE_NAME = "schullager-shell-v3";
+const SHELL = ["./", "./manifest.webmanifest", "./icon.svg", "./favicon-32.png", "./icon-180.png", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
