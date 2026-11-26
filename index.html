@@ -7,6 +7,7 @@
 <meta name="description" content="Barcodegestützte Lagerverwaltung für Veranstaltungstechnik und Schulinventar.">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon.svg">
 <title>Schullager – Lagerverwaltung</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
@@ -52,9 +53,8 @@ header{
 }
 .brand{display:flex;gap:13px;align-items:center;min-width:0}
 .logo{
- width:46px;height:46px;flex:0 0 46px;border-radius:15px;display:grid;place-items:center;
- background:linear-gradient(145deg,#8af4d6,#31c7a4);color:#06251f;font-size:19px;font-weight:950;
- letter-spacing:-1px;box-shadow:0 8px 25px rgba(54,205,168,.2);border:1px solid rgba(255,255,255,.35)
+ width:46px;height:46px;flex:0 0 46px;border-radius:15px;display:block;object-fit:cover;
+ box-shadow:0 8px 25px rgba(105,223,192,.18);border:1px solid rgba(255,255,255,.22)
 }
 h1{font-size:20px;letter-spacing:-.5px;margin:0;font-weight:800}
 header p{margin:3px 0 0;color:var(--muted);font-size:12px}
@@ -269,7 +269,7 @@ hr{border-top-color:rgba(255,255,255,.10)}
 </head>
 <body>
 <header>
- <div class="brand"><div class="logo">SL</div><div><h1>Schullager</h1><p>Barcodegestützte Lagerverwaltung</p></div></div>
+ <div class="brand"><img class="logo" src="./icon.svg" alt="Schullager Logo"><div><h1>Schullager</h1><p>Barcodegestützte Lagerverwaltung</p></div></div>
  <div class="actions"><a class="download-link" href="https://github.com/kotzschfelix-sudo/Scantest/releases/latest/download/Schullager-Setup.exe">Windows-App herunterladen</a><span id="headerUser" class="small"></span><button id="signOutBtn" class="secondary smallbtn hidden" type="button">Abmelden</button></div>
 </header>
 <main>

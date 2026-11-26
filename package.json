@@ -20,13 +20,15 @@
     },
     "files": [
       "main.js",
-      "package.json"
+      "package.json",
+      "icon.ico"
     ],
     "artifactName": "Schullager-Setup.exe",
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,
