@@ -1,0 +1,42 @@
+{
+  "name": "schullager-desktop",
+  "version": "1.0.0",
+  "description": "Windows-Desktop-App für Schullager",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:windows": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "de.schullager.desktop",
+    "productName": "Schullager",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "artifactName": "Schullager-Setup.exe",
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Schullager",
+      "runAfterFinish": true
+    }
+  }
+}
