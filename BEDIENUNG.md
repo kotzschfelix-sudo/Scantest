@@ -41,3 +41,13 @@ Das erste bereits vorhandene Konto wurde als Admin eingerichtet. Weitere Konten 
 5. Für den gemeinsamen Bestand braucht der Pi Internetzugang, da die Daten in Supabase liegen.
 
 **Wichtig:** Der Service Worker speichert nur die App-Hülle. Bestand, Anmeldungen und Buchungen benötigen weiterhin eine Internetverbindung. Vollständige Offline-Lagerverwaltung und automatisches Synchronisieren sind noch nicht eingebaut. Der Raspberry Pi selbst wurde noch nicht eingerichtet oder getestet.
+
+## Inventur
+1. Den Menüpunkt **Inventur** öffnen.
+2. Optional einen Lagerort auswählen und eine Notiz eintragen.
+3. **Neue Inventur starten** wählen. Die Liste enthält den zu diesem Zeitpunkt gespeicherten Bestand als Vergleichswert.
+4. Barcodes mit USB-Scanner oder Kamera scannen. Jeder Scan zählt die Menge des Artikels um 1 hoch. Alternativ die gezählte Menge direkt in der Tabelle eintragen; auch 0 ist möglich.
+5. Oben siehst du, wie viele Artikel noch offen sind und bei wie vielen es Abweichungen gibt.
+6. Erst wenn alle Artikel gezählt wurden, kann ein Admin oder die Lagerleitung die Inventur abschließen. Die Mengen werden dann gemeinsam übernommen und Abweichungen als **Inventur-Korrektur** in der Bewegungshistorie gespeichert.
+
+**Wichtig:** Der Zählfortschritt wird lokal auf dem Gerät gespeichert, auf dem die Inventur gestartet wurde. Für die Inventur und den Abschluss ist eine Internetverbindung nötig. Wenn ein anderer Benutzer währenddessen den Bestand eines Artikels verändert, wird der Abschluss abgebrochen, damit keine Änderung unbemerkt überschrieben wird. Helfer können zählen; abschließen dürfen nur Admins und die Lagerleitung.
