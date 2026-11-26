@@ -1,0 +1,39 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Abhängigkeiten installieren
+        run: npm install
+
+      - name: Windows-Installer bauen
+        run: npm run build:windows
+
+      - name: Installer als GitHub Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Schullager Windows v1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          files: dist/Schullager-Setup.exe
+          make_latest: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
