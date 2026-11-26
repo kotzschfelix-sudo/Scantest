@@ -74,7 +74,7 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
     <form id="itemForm">
      <div class="grid">
       <div class="field"><label for="itemName">Bezeichnung *</label><input id="itemName" required maxlength="120" placeholder="z. B. LED-Scheinwerfer"></div>
-      <div class="field"><label for="itemBarcode">Barcode / Kennung *</label><input id="itemBarcode" required maxlength="40" placeholder="z. B. SL000001"></div>
+      <div class="field"><label for="itemBarcode">Automatische Inventar-ID</label><input id="itemBarcode" required maxlength="40" readonly aria-describedby="barcodeHelp"><small id="barcodeHelp" class="muted">Wird beim Anlegen automatisch und eindeutig vergeben.</small></div>
       <div class="field"><label for="itemCategory">Kategorie</label><select id="itemCategory"><option value="">Ohne Kategorie</option></select></div>
       <div class="field"><label for="itemLocation">Lagerort</label><select id="itemLocation"><option value="">Noch kein Lagerort</option></select></div>
       <div class="field"><label for="itemQuantity">Menge</label><input id="itemQuantity" type="number" min="0" step="0.01" value="1"></div>
@@ -88,7 +88,7 @@ footer{text-align:center;color:#78889d;font-size:12px;padding:20px}
       <div class="field"><label for="itemSerial">Seriennummer</label><input id="itemSerial" maxlength="100"></div>
       <div class="field wide"><label for="itemDescription">Notizen</label><textarea id="itemDescription" maxlength="1000"></textarea></div>
      </div>
-     <div class="actions"><button id="saveItemBtn" type="submit">Artikel speichern</button><button type="button" class="secondary" id="makeBarcode">Kennung erzeugen</button><button type="button" class="secondary hidden" id="cancelEdit">Bearbeiten abbrechen</button></div>
+     <div class="actions"><button id="saveItemBtn" type="submit">Artikel speichern</button><button type="button" class="secondary hidden" id="cancelEdit">Bearbeiten abbrechen</button></div>
      <p id="itemMessage" class="small" role="status"></p>
     </form>
    </div>
@@ -246,9 +246,14 @@ function renderLocations(){$("locationList").innerHTML=locations.length?'<table>
 function renderHistory(){
  const names=new Map(allItems.map(x=>[x.id,x.name]));$("historyTable").innerHTML=movements.length?'<table><tr><th>Zeit</th><th>Artikel</th><th>Vorgang</th><th>Menge</th><th>Von → Nach</th><th>Notiz</th></tr>'+movements.map(m=>'<tr><td>'+new Date(m.created_at).toLocaleString("de-DE")+'</td><td>'+esc(names.get(m.item_id)||"Artikel")+'</td><td>'+({in:"Einlagerung",out:"Auslagerung",move:"Umlagerung",adjustment:"Korrektur"}[m.movement_type]||m.movement_type)+'</td><td>'+fmt(m.quantity)+'</td><td>'+esc(locationName(m.from_location_id))+' → '+esc(locationName(m.to_location_id))+'</td><td>'+esc(m.note||"—")+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Lagerbewegungen.</div>';
 }
+function createInventoryBarcode(){
+ const bytes=new Uint8Array(6);crypto.getRandomValues(bytes);
+ return "SL-"+Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("").toUpperCase();
+}
 function resetItemForm(){
  editingItemId=null;
  $("itemForm").reset();$("itemQuantity").disabled=false;$("itemStatus").disabled=false;$("itemQuantity").value=1;$("itemUnit").value="Stück";$("itemMin").value=0;
+ $("itemBarcode").value=createInventoryBarcode();$("itemBarcode").readOnly=true;
  $("itemFormTitle").textContent="Artikel hinzufügen";$("saveItemBtn").textContent="Artikel speichern";$("cancelEdit").classList.add("hidden");
 }
 function startEdit(id){
@@ -270,15 +275,21 @@ async function archiveItem(id){
 }
 $("itemForm").addEventListener("submit",async e=>{
  e.preventDefault();
- const payload={name:$("itemName").value.trim(),barcode:$("itemBarcode").value.trim(),category_id:$("itemCategory").value||null,location_id:$("itemLocation").value||null,quantity:Number($("itemQuantity").value),unit:$("itemUnit").value.trim()||"Stück",item_type:$("itemType").value,condition:$("itemCondition").value,status:$("itemStatus").value,min_quantity:Number($("itemMin").value||0),manufacturer:$("itemManufacturer").value.trim()||null,model:$("itemModel").value.trim()||null,serial_number:$("itemSerial").value.trim()||null,description:$("itemDescription").value.trim()||null};
- if(editingItemId){delete payload.quantity;delete payload.status;}
- const query=editingItemId?db.from("inventory_items").update(payload).eq("id",editingItemId):db.from("inventory_items").insert(payload);
- const {error}=await query;
- if(error){message("itemMessage",error.message,"error");return;}
- message("itemMessage",editingItemId?"Änderungen gespeichert.":"Artikel gespeichert.","success");resetItemForm();await loadAll();
+ const isEditing=!!editingItemId;
+ const payload={name:$("itemName").value.trim(),barcode:$("itemBarcode").value.trim()||createInventoryBarcode(),category_id:$("itemCategory").value||null,location_id:$("itemLocation").value||null,quantity:Number($("itemQuantity").value),unit:$("itemUnit").value.trim()||"Stück",item_type:$("itemType").value,condition:$("itemCondition").value,status:$("itemStatus").value,min_quantity:Number($("itemMin").value||0),manufacturer:$("itemManufacturer").value.trim()||null,model:$("itemModel").value.trim()||null,serial_number:$("itemSerial").value.trim()||null,description:$("itemDescription").value.trim()||null};
+ if(isEditing){delete payload.quantity;delete payload.status;}
+ let result;
+ for(let attempt=0;attempt<4;attempt++){
+   if(!isEditing&&attempt>0)payload.barcode=createInventoryBarcode();
+   const query=isEditing?db.from("inventory_items").update(payload).eq("id",editingItemId):db.from("inventory_items").insert(payload);
+   result=await query;
+   if(!result.error||result.error.code!=="23505"||isEditing)break;
+ }
+ if(result.error){message("itemMessage","Speichern fehlgeschlagen: "+result.error.message,"error");return;}
+ message("itemMessage",isEditing?"Änderungen gespeichert.":"Artikel gespeichert – Inventar-ID "+payload.barcode+" wurde automatisch vergeben.","success");resetItemForm();await loadAll();
 });
 $("cancelEdit").addEventListener("click",resetItemForm);
-$("makeBarcode").addEventListener("click",()=>{$("itemBarcode").value="SL"+Date.now().toString().slice(-10);});
+resetItemForm();
 $("searchItems").addEventListener("input",renderItems);$("sortItems").addEventListener("change",renderItems);$("filterCategory").addEventListener("change",renderItems);
 $("categoryForm").addEventListener("submit",async e=>{e.preventDefault();const name=$("categoryName").value.trim();const {error}=await db.from("inventory_categories").insert({name});if(error){alert(error.message);return;}e.target.reset();await loadAll();});
 $("locationForm").addEventListener("submit",async e=>{e.preventDefault();if(!canManage())return;const wasEditing=!!editingLocationId;const payload={name:$("locationName").value.trim(),parent_id:$("locationParent").value||null,description:$("locationDescription").value.trim()||null};const query=wasEditing?db.from("inventory_locations").update(payload).eq("id",editingLocationId):db.from("inventory_locations").insert(payload);const {error}=await query;if(error){message("locationMessage","Speichern fehlgeschlagen: "+error.message,"error");return;}resetLocationForm();await loadAll();message("locationMessage",wasEditing?"Änderungen gespeichert.":"Lagerort hinzugefügt.","success");});
