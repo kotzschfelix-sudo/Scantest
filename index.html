@@ -416,7 +416,7 @@ hr{border-top-color:rgba(255,255,255,.10)}
 const SUPABASE_URL = "https://ubwmnlahwgtxzkdzxipk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_sigPCgaFUumWw-f8Tdwysg_m3pj1E1q";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let currentUser = null, currentRole = "pending", userRoles = [], isRegister = false, items = [], allItems = [], categories = [], locations = [], movements = [], loans = [], scanner = null, stocktakeScanner = null, stocktakeState = undefined, selectedLabels = new Set(), editingItemId = null, editingLocationId = null;
+let currentUser = null, currentRole = "pending", userRoles = [], isRegister = false, items = [], allItems = [], categories = [], locations = [], movements = [], loans = [], scanner = null, stocktakeScanner = null, stocktakeScanLocked = false, stocktakeState = undefined, selectedLabels = new Set(), editingItemId = null, editingLocationId = null;
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = value => new Intl.NumberFormat("de-DE",{maximumFractionDigits:2}).format(Number(value||0));
@@ -728,8 +728,9 @@ $("stocktakeCameraStart").addEventListener("click",async()=>{
  if(!window.Html5Qrcode){message("stocktakeScanStatus","Die Scanner-Bibliothek konnte nicht geladen werden.","error");return;}
  $("stocktakeCameraStart").disabled=true;message("stocktakeScanStatus","Kamera wird gestartet …");
  try{
+  stocktakeScanLocked=false;
   stocktakeScanner=new Html5Qrcode("stocktakeReader");
-  await stocktakeScanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:150}},decoded=>{countStocktakeBarcode(decoded);stopStocktakeCamera();},()=>{});
+  await stocktakeScanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:150}},decoded=>{if(stocktakeScanLocked)return;stocktakeScanLocked=true;stopStocktakeCamera();countStocktakeBarcode(decoded);},()=>{});
   $("stocktakeCameraStop").disabled=false;message("stocktakeScanStatus","Kamera aktiv – Barcode vor die Kamera halten.","success");
  }catch(err){stocktakeScanner=null;$("stocktakeCameraStart").disabled=false;message("stocktakeScanStatus","Kamera konnte nicht gestartet werden. HTTPS und Kameraberechtigung prüfen.","error");}
 });
