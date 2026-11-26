@@ -263,8 +263,27 @@ hr{border-top-color:rgba(255,255,255,.10)}
 
 
 @media print{
- body{background:#fff!important;color:#000!important}
- #labelPrintArea{display:none}
+ @page{size:A4 portrait;margin:7mm}
+ html,body{margin:0!important;padding:0!important;background:#fff!important;color:#111!important}
+ body *{visibility:hidden!important}
+ #labelPrintArea,#labelPrintArea *{visibility:visible!important}
+ #labelPrintArea{
+  display:grid!important;position:absolute!important;left:0!important;top:0!important;width:100%!important;
+  grid-template-columns:repeat(var(--print-columns,3),minmax(0,1fr))!important;
+  gap:var(--print-gap,5mm)!important;padding:0!important;margin:0!important;
+  background:#fff!important;color:#111!important
+ }
+ .print-label{
+  display:flex!important;flex-direction:column;align-items:center;justify-content:center;
+  min-height:var(--print-height,32mm)!important;padding:3mm!important;
+  border:var(--print-border,1px solid #c9cdd0)!important;border-radius:2mm!important;
+  color:#111!important;background:#fff!important;break-inside:avoid!important;page-break-inside:avoid!important;
+  overflow:hidden!important
+ }
+ .print-label svg{display:block!important;width:100%!important;max-width:100%!important;height:auto!important;max-height:var(--print-barcode-height,17mm)!important}
+ .print-name{font:700 9pt/1.2 Arial,sans-serif!important;text-align:center!important;overflow-wrap:anywhere!important;margin-bottom:1.5mm!important}
+ .print-code{font:8pt/1.2 monospace!important;letter-spacing:.15mm!important;margin-top:1mm!important}
+ .print-brand{font:6pt/1 Arial,sans-serif!important;color:#555!important;margin-top:1.5mm!important;letter-spacing:.6mm!important}
 }
 </style>
 </head>
@@ -408,6 +427,19 @@ hr{border-top-color:rgba(255,255,255,.10)}
  </section>
 </main>
 <div id="labelPrintArea" aria-hidden="true"></div>
+<dialog id="printSettingsDialog">
+ <h2>Etikettendruck vorbereiten</h2>
+ <p id="printLabelCount" class="muted">Etiketten vorbereitet.</p>
+ <form id="printSettingsForm">
+  <div class="grid">
+   <div class="field"><label for="printColumns">Etiketten pro Zeile</label><select id="printColumns"><option value="2">2 – groß</option><option value="3" selected>3 – Standard</option><option value="4">4 – kompakt</option></select></div>
+   <div class="field"><label for="printSize">Etikettengröße</label><select id="printSize"><option value="small">Klein</option><option value="medium" selected>Mittel</option><option value="large">Groß</option></select></div>
+  </div>
+  <label style="display:flex;align-items:center;gap:10px;margin:8px 0 16px"><input id="printBrand" type="checkbox" checked style="width:auto"> Schullager-Kennzeichnung mitdrucken</label>
+  <p class="small">Gedruckt wird auf A4. Im Druckdialog bitte „Tatsächliche Größe“ bzw. 100 % wählen und Kopf- und Fußzeilen deaktivieren.</p>
+  <div class="dialog-actions"><button type="button" class="secondary" id="cancelPrintSettings">Abbrechen</button><button type="submit">Druckansicht öffnen</button></div>
+ </form>
+</dialog>
 <dialog id="movementDialog">
  <h2 id="movementTitle">Lagerbewegung</h2><p id="movementItem" class="muted"></p>
  <form id="movementForm">
@@ -792,12 +824,41 @@ $("startScan").addEventListener("click",async()=>{
 });
 $("stopScan").addEventListener("click",stopScan);
 function generateBarcode(value){if(!value.trim())throw new Error("Bitte einen Barcode-Inhalt eingeben.");JsBarcode("#barcodeSvg",value.trim(),{format:"CODE128",lineColor:"#111",background:"#fff",width:2,height:90,displayValue:false,margin:8});$("barcodeText").textContent=value.trim();}
+let pendingPrintRows=[];
 function printLabelList(rows){
- const area=$("labelPrintArea");if(!rows.length)return;
- area.innerHTML=rows.map((x,i)=>'<div class="print-label"><div class="print-name">'+esc(x.name)+'</div><svg id="print-barcode-'+i+'"></svg><div class="print-code">'+esc(x.barcode)+'</div><div class="print-brand">SCHULLAGER</div></div>').join("");
- rows.forEach((x,i)=>JsBarcode("#print-barcode-"+i,x.barcode,{format:"CODE128",lineColor:"#111",background:"#fff",width:1.7,height:48,displayValue:false,margin:2}));
- window.print();
+ if(!rows.length)return;
+ pendingPrintRows=rows.map(x=>({name:String(x.name||"Artikel"),barcode:String(x.barcode||"") })).filter(x=>x.barcode);
+ if(!pendingPrintRows.length)return;
+ $("printLabelCount").textContent=pendingPrintRows.length+" Etikett"+(pendingPrintRows.length===1?"":"en")+" vorbereitet.";
+ $("printColumns").value=pendingPrintRows.length>18?"4":pendingPrintRows.length>8?"3":"3";
+ $("printSize").value="medium";
+ $("printBrand").checked=true;
+ $("printSettingsDialog").showModal();
 }
+$("cancelPrintSettings").addEventListener("click",()=>$("printSettingsDialog").close());
+$("printSettingsForm").addEventListener("submit",e=>{
+ e.preventDefault();
+ if(!pendingPrintRows.length)return;
+ const columns=Math.max(2,Math.min(4,Number($("printColumns").value)||3));
+ const size=$("printSize").value;
+ const showBrand=$("printBrand").checked;
+ const presets={small:{height:"25mm",barcode:34,gap:"3mm"},medium:{height:"32mm",barcode:48,gap:"5mm"},large:{height:"43mm",barcode:62,gap:"5mm"}};
+ const preset=presets[size]||presets.medium;
+ const area=$("labelPrintArea");
+ area.style.setProperty("--print-columns",columns);
+ area.style.setProperty("--print-height",preset.height);
+ area.style.setProperty("--print-barcode-height",size==="small"?"12mm":size==="large"?"21mm":"17mm");
+ area.style.setProperty("--print-gap",preset.gap);
+ area.style.setProperty("--print-border","1px solid #c9cdd0");
+ area.innerHTML=pendingPrintRows.map((x,i)=>'<div class="print-label"><div class="print-name">'+esc(x.name)+'</div><svg id="print-barcode-'+i+'"></svg><div class="print-code">'+esc(x.barcode)+'</div>'+(showBrand?'<div class="print-brand">SCHULLAGER</div>':'')+'</div>').join("");
+ pendingPrintRows.forEach((x,i)=>JsBarcode("#print-barcode-"+i,x.barcode,{format:"CODE128",lineColor:"#111",background:"#fff",width:1.7,height:preset.barcode,displayValue:false,margin:2}));
+ $("printSettingsDialog").close();
+ window.setTimeout(()=>window.print(),120);
+});
+window.addEventListener("afterprint",()=>{
+ $("labelPrintArea").innerHTML="";
+ pendingPrintRows=[];
+});
 $("generateBarcode").addEventListener("click",()=>{try{generateBarcode($("generatorInput").value);message("generatorStatus","Code-128-Barcode erfolgreich erzeugt.","success");}catch(e){message("generatorStatus",e.message,"error");}});
 $("printBarcode").addEventListener("click",()=>{try{const value=$("generatorInput").value.trim();generateBarcode(value);printLabelList([{name:"Manueller Barcode",barcode:value}]);}catch(e){message("generatorStatus",e.message,"error");}});
 function printItemBarcode(id){const item=items.find(x=>x.id===id);if(item)printLabelList([item]);}
