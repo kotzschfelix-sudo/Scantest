@@ -288,7 +288,7 @@ hr{border-top-color:rgba(255,255,255,.10)}
  <section id="appView" class="hidden">
   <div id="pendingAccess" class="panel hidden"><h2>Zugang noch nicht freigeschaltet</h2><p class="muted">Ein Administrator muss deinem Konto zuerst eine Rolle zuweisen. Bis dahin sind keine Lagerdaten sichtbar.</p></div>
   <nav class="no-print" id="tabs">
-   <button class="active" data-tab="dashboard">Übersicht</button><button data-tab="items">Artikel</button><button data-tab="categories">Kategorien</button><button data-tab="locations">Lagerorte</button><button data-tab="history">Bewegungen</button><button data-tab="loans">Ausleihen</button><button data-tab="users" id="usersTab" class="hidden">Benutzer</button><button data-tab="tools">Scanner & Barcodes</button>
+   <button class="active" data-tab="dashboard">Übersicht</button><button data-tab="items">Artikel</button><button data-tab="categories">Kategorien</button><button data-tab="locations">Lagerorte</button><button data-tab="history">Bewegungen</button><button data-tab="stocktake">Inventur</button><button data-tab="loans">Ausleihen</button><button data-tab="users" id="usersTab" class="hidden">Benutzer</button><button data-tab="tools">Scanner & Barcodes</button>
   </nav>
   <section id="tab-dashboard">
    <div class="stats">
@@ -352,6 +352,40 @@ hr{border-top-color:rgba(255,255,255,.10)}
   </section>
 
   <section id="tab-history" class="hidden"><div class="panel"><h2>Lagerbewegungen</h2><p class="muted">Einlagerungen, Ausgaben und Umlagerungen werden hier protokolliert.</p><div id="historyTable" class="tablewrap"></div></div></section>
+  <section id="tab-stocktake" class="hidden">
+   <div class="panel">
+    <h2>Inventur</h2>
+    <p class="muted">Zähle den tatsächlichen Bestand im Lager. Die gespeicherten Mengen werden erst nach Abschluss durch Admin oder Lagerleitung angepasst.</p>
+    <div class="grid">
+     <div class="field"><label for="stocktakeLocation">Lagerort für die Inventur</label><select id="stocktakeLocation"><option value="">Alle Lagerorte</option></select></div>
+     <div class="field"><label for="stocktakeNote">Notiz (optional)</label><input id="stocktakeNote" maxlength="180" placeholder="z. B. Inventur Lichtlager"></div>
+    </div>
+    <div class="actions"><button id="startStocktake" type="button">Neue Inventur starten</button><button id="cancelStocktake" class="secondary hidden" type="button">Inventur verwerfen</button></div>
+    <p id="stocktakeStatus" class="small" role="status">Noch keine aktive Inventur auf diesem Gerät.</p>
+   </div>
+   <div id="stocktakeWorkspace" class="hidden">
+    <div class="stats">
+     <div class="stat"><span class="small">Artikel gesamt</span><b id="stocktakeTotal">0</b></div>
+     <div class="stat"><span class="small">Gezählt</span><b id="stocktakeDone">0</b></div>
+     <div class="stat"><span class="small">Noch offen</span><b id="stocktakeRemaining">0</b></div>
+     <div class="stat"><span class="small">Abweichungen</span><b id="stocktakeDifferences">0</b></div>
+    </div>
+    <div class="panel">
+     <h3>Artikel erfassen</h3>
+     <div class="toolbar">
+      <div class="field"><label for="stocktakeBarcode">Barcode scannen (USB-Scanner oder Eingabe)</label><input id="stocktakeBarcode" placeholder="Barcode scannen und Enter drücken"></div>
+      <button id="stocktakeCameraStart" type="button">Kamera starten</button><button id="stocktakeCameraStop" class="secondary" type="button" disabled>Kamera stoppen</button>
+     </div>
+     <div id="stocktakeReader"></div>
+     <p id="stocktakeScanStatus" class="small">Ein Scan erhöht die gezählte Menge des passenden Artikels um 1. Mengen kannst du in der Tabelle auch direkt eintragen.</p>
+     <div class="field"><label for="stocktakeSearch">Inventurliste filtern</label><input id="stocktakeSearch" placeholder="Artikelname oder Inventar-ID suchen"></div>
+     <div id="stocktakeTable" class="tablewrap"></div>
+     <div class="actions" style="margin-top:16px"><button id="finishStocktake" type="button" disabled>Inventur abschließen und Bestände übernehmen</button></div>
+     <p class="small">Der Fortschritt wird auf diesem Gerät gespeichert. Beim Abschluss werden nur Abweichungen als Inventur-Korrektur in der Bewegungshistorie protokolliert. Wenn ein Bestand während der Inventur anderweitig geändert wurde, wird der Abschluss sicherheitshalber abgebrochen.</p>
+    </div>
+   </div>
+  </section>
+
   <section id="tab-loans" class="hidden"><div class="panel"><h2>Ausleihen & Rückgaben</h2><p class="muted">Ausgegebene Mengen werden direkt vom Bestand abgezogen und Rückgaben wieder eingebucht.</p><div id="loansTable" class="tablewrap"></div></div></section>
   <section id="tab-users" class="hidden"><div class="panel"><h2>Benutzerrechte verwalten</h2><p class="muted">Neue Konten sind zunächst gesperrt. Gib nur berechtigten Personen eine passende Rolle.</p><div id="userRoleTable" class="tablewrap"></div></div></section>
 
@@ -382,7 +416,7 @@ hr{border-top-color:rgba(255,255,255,.10)}
 const SUPABASE_URL = "https://ubwmnlahwgtxzkdzxipk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_sigPCgaFUumWw-f8Tdwysg_m3pj1E1q";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let currentUser = null, currentRole = "pending", userRoles = [], isRegister = false, items = [], allItems = [], categories = [], locations = [], movements = [], loans = [], scanner = null, selectedLabels = new Set(), editingItemId = null, editingLocationId = null;
+let currentUser = null, currentRole = "pending", userRoles = [], isRegister = false, items = [], allItems = [], categories = [], locations = [], movements = [], loans = [], scanner = null, stocktakeScanner = null, stocktakeState = undefined, selectedLabels = new Set(), editingItemId = null, editingLocationId = null;
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = value => new Intl.NumberFormat("de-DE",{maximumFractionDigits:2}).format(Number(value||0));
@@ -404,7 +438,7 @@ async function authSubmit(e){
 }
 $("authForm").addEventListener("submit",authSubmit);
 $("toggleAuth").addEventListener("click",()=>{isRegister=!isRegister;$("authSubmit").textContent=isRegister?"Konto erstellen":"Anmelden";$("toggleAuth").textContent=isRegister?"Zurück zur Anmeldung":"Noch kein Konto? Registrieren";$("password").autocomplete=isRegister?"new-password":"current-password";});
-async function signOut(){await db.auth.signOut();currentUser=null;setAuthView(false);}
+async function signOut(){stopStocktakeCamera();currentUser=null;stocktakeState=undefined;await db.auth.signOut();setAuthView(false);}
 $("signOutBtn").addEventListener("click",signOut);
 db.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;setAuthView(!!currentUser);if(currentUser)loadAll();});
 async function loadAll(){
@@ -412,12 +446,13 @@ async function loadAll(){
  if(roleResult.error){console.error(roleResult.error);message("authMessage","Benutzerrolle konnte nicht geladen werden: "+roleResult.error.message,"error");return;}
  userRoles=roleResult.data||[];
  currentRole=userRoles.find(x=>x.user_id===currentUser?.id)?.role||"pending";
+ if(stocktakeState===undefined)restoreStocktake();
  $("headerUser").textContent=currentUser?currentUser.email+" · "+roleLabel(currentRole):"";
  $("pendingAccess").classList.toggle("hidden",currentRole!=="pending");
  $("tabs").classList.toggle("hidden",currentRole==="pending");
  $("usersTab").classList.toggle("hidden",currentRole!=="admin");
  if(currentRole==="pending"){
-   ["dashboard","items","categories","locations","history","loans","users","tools"].forEach(t=>$("tab-"+t).classList.add("hidden"));
+   ["dashboard","items","categories","locations","history","stocktake","loans","users","tools"].forEach(t=>$("tab-"+t).classList.add("hidden"));
    return;
  }
  const [a,b,c,d,e]=await Promise.all([
@@ -435,7 +470,7 @@ async function loadAll(){
  $("locationForm").classList.toggle("hidden",!canManage());
  renderAll();
 }
-function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();renderLowStock();renderLoans();renderUsers();}
+function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();renderLowStock();renderLoans();renderUsers();renderStocktake();}
 function renderSelects(){
  const opts=(arr,first)=>first+arr.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
  $("itemCategory").innerHTML=opts(categories,'<option value="">Ohne Kategorie</option>');
@@ -444,6 +479,7 @@ function renderSelects(){
  const blockedLocationIds=editingLocationId?getLocationDescendants(editingLocationId):new Set();if(editingLocationId)blockedLocationIds.add(editingLocationId);
  $("locationParent").innerHTML=opts(locations.filter(x=>!blockedLocationIds.has(x.id)),'<option value="">Keiner (oberste Ebene)</option>');
  $("movementLocation").innerHTML=opts(locations,'<option value="">Aktuellen Ort beibehalten</option>');
+ $("stocktakeLocation").innerHTML=opts(locations,'<option value="">Alle Lagerorte</option>');
 }
 function renderStats(){
  $("statItems").textContent=items.length;$("statQuantity").textContent=fmt(items.reduce((s,x)=>s+Number(x.quantity),0));$("statLocations").textContent=locations.length;
@@ -612,9 +648,110 @@ function renderUsers(){
    await loadAll();
  }));
 }
+
+function stocktakeStorageKey(){return "schullager-stocktake-"+(currentUser?.id||"");}
+function saveStocktake(){
+ if(!currentUser||!stocktakeState)return;
+ try{localStorage.setItem(stocktakeStorageKey(),JSON.stringify(stocktakeState));}catch(e){message("stocktakeStatus","Fortschritt konnte nicht lokal gespeichert werden. Bitte Inventur vor dem Schließen abschließen.","error");}
+}
+function restoreStocktake(){
+ stocktakeState=null;
+ if(!currentUser)return;
+ try{const raw=localStorage.getItem(stocktakeStorageKey());if(raw){const parsed=JSON.parse(raw);if(parsed&&Array.isArray(parsed.rows))stocktakeState=parsed;}}catch(e){stocktakeState=null;}
+}
+function startStocktake(){
+ if(!canManage()){message("stocktakeStatus","Du hast keine Berechtigung, eine Inventur zu starten.","error");return;}
+ const locationId=$("stocktakeLocation").value;
+ const source=items.filter(x=>!locationId||x.location_id===locationId);
+ if(!source.length){message("stocktakeStatus","Für diese Auswahl gibt es keine aktiven Artikel.","error");return;}
+ if(stocktakeState&&!confirm("Eine Inventur läuft bereits. Soll sie verworfen und eine neue gestartet werden?"))return;
+ stocktakeState={startedAt:new Date().toISOString(),locationId,note:$("stocktakeNote").value.trim(),rows:source.map(x=>({item_id:x.id,barcode:x.barcode,name:x.name,unit:x.unit,expected:Number(x.quantity),counted:null}))};
+ $("stocktakeSearch").value="";
+ saveStocktake();renderStocktake();message("stocktakeStatus","Inventur gestartet. Scanne die Barcodes oder trage die gezählten Mengen ein.","success");
+}
+function stocktakeSummary(){
+ if(!stocktakeState)return;
+ const rows=stocktakeState.rows,done=rows.filter(x=>x.counted!==null&&Number.isFinite(Number(x.counted))).length;
+ const differences=rows.filter(x=>x.counted!==null&&Number(x.counted)!==Number(x.expected)).length;
+ $("stocktakeTotal").textContent=rows.length;$("stocktakeDone").textContent=done;
+ $("stocktakeRemaining").textContent=rows.length-done;$("stocktakeDifferences").textContent=differences;
+ $("finishStocktake").disabled=!canAdminister()||done!==rows.length||rows.length===0;
+ $("finishStocktake").textContent=canAdminister()?"Inventur abschließen und Bestände übernehmen":"Abschluss nur durch Admin oder Lagerleitung";
+}
+function renderStocktake(){
+ const active=!!(stocktakeState&&Array.isArray(stocktakeState.rows));
+ $("stocktakeWorkspace").classList.toggle("hidden",!active);
+ $("startStocktake").disabled=!canManage();
+ $("cancelStocktake").classList.toggle("hidden",!active);
+ if(!active){$("stocktakeTable").innerHTML='<div class="empty">Starte eine neue Inventur, um Artikel zu zählen.</div>';return;}
+ $("stocktakeNote").value=stocktakeState.note||"";
+ const q=$("stocktakeSearch").value.trim().toLowerCase();
+ const rows=stocktakeState.rows.filter(r=>!q||(r.name+" "+r.barcode).toLowerCase().includes(q));
+ $("stocktakeTable").innerHTML=rows.length?'<table><tr><th>Artikel</th><th>Gespeichert</th><th>Gezählt</th><th>Abweichung</th><th>Status</th></tr>'+rows.map(r=>{
+  const done=r.counted!==null&&Number.isFinite(Number(r.counted)),diff=done?Number(r.counted)-Number(r.expected):null;
+  const state=!done?'<span class="pill">Offen</span>':diff===0?'<span class="pill good">Stimmt</span>':'<span class="pill warn">Abweichung</span>';
+  return '<tr><td><b>'+esc(r.name)+'</b><div class="muted">'+esc(r.barcode)+'</div></td><td>'+fmt(r.expected)+' '+esc(r.unit)+'</td><td><input aria-label="Gezählte Menge für '+esc(r.name)+'" data-stocktake-count="'+esc(r.item_id)+'" type="number" min="0" max="1000000000" step="0.01" placeholder="Noch offen" value="'+(done?esc(r.counted):'')+'" style="min-width:105px;width:120px"></td><td>'+(done?(diff>0?"+":"")+fmt(diff)+" "+esc(r.unit):"—")+'</td><td>'+state+'</td></tr>';
+ }).join("")+'</table>':'<div class="empty">Keine passenden Artikel gefunden.</div>';
+ stocktakeSummary();
+}
+function countStocktakeBarcode(value){
+ const code=String(value||"").trim().toLowerCase();if(!code||!stocktakeState)return;
+ const row=stocktakeState.rows.find(x=>String(x.barcode).toLowerCase()===code);
+ if(!row){message("stocktakeScanStatus","Barcode nicht in dieser Inventur enthalten: "+value,"error");return;}
+ row.counted=(row.counted===null?0:Number(row.counted))+1;
+ saveStocktake();$("stocktakeBarcode").value="";message("stocktakeScanStatus",row.name+": gezählt "+fmt(row.counted)+" "+row.unit,"success");renderStocktake();
+ $("stocktakeBarcode").focus();
+}
+$("startStocktake").addEventListener("click",startStocktake);
+$("cancelStocktake").addEventListener("click",()=>{
+ if(!stocktakeState||!confirm("Die laufende Inventur wirklich verwerfen? Der gespeicherte Lagerbestand bleibt unverändert."))return;
+ stopStocktakeCamera();try{localStorage.removeItem(stocktakeStorageKey());}catch(e){}stocktakeState=null;renderStocktake();message("stocktakeStatus","Inventur verworfen. Der Lagerbestand wurde nicht verändert.","success");
+});
+$("stocktakeNote").addEventListener("input",()=>{if(stocktakeState){stocktakeState.note=$("stocktakeNote").value.slice(0,180);saveStocktake();}});
+$("stocktakeSearch").addEventListener("input",renderStocktake);
+$("stocktakeTable").addEventListener("input",e=>{
+ const id=e.target.dataset.stocktakeCount;if(!id||!stocktakeState)return;
+ const row=stocktakeState.rows.find(x=>x.item_id===id);if(!row)return;
+ row.counted=e.target.value===""?null:Number(e.target.value);
+ if(row.counted!==null&&(!Number.isFinite(row.counted)||row.counted<0||row.counted>1000000000)){row.counted=null;e.target.value="";}
+ saveStocktake();stocktakeSummary();
+});
+$("stocktakeTable").addEventListener("change",e=>{if(e.target.dataset.stocktakeCount)renderStocktake();});
+$("stocktakeBarcode").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();countStocktakeBarcode(e.target.value);}});
+function stopStocktakeCamera(){
+ if(stocktakeScanner){const active=stocktakeScanner;stocktakeScanner=null;active.stop().catch(()=>{}).finally(()=>active.clear().catch(()=>{}));}
+ if($("stocktakeCameraStart"))$("stocktakeCameraStart").disabled=false;
+ if($("stocktakeCameraStop"))$("stocktakeCameraStop").disabled=true;
+}
+$("stocktakeCameraStart").addEventListener("click",async()=>{
+ if(!stocktakeState){message("stocktakeScanStatus","Bitte zuerst eine Inventur starten.","error");return;}
+ if(!window.Html5Qrcode){message("stocktakeScanStatus","Die Scanner-Bibliothek konnte nicht geladen werden.","error");return;}
+ $("stocktakeCameraStart").disabled=true;message("stocktakeScanStatus","Kamera wird gestartet …");
+ try{
+  stocktakeScanner=new Html5Qrcode("stocktakeReader");
+  await stocktakeScanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:150}},decoded=>{countStocktakeBarcode(decoded);stopStocktakeCamera();},()=>{});
+  $("stocktakeCameraStop").disabled=false;message("stocktakeScanStatus","Kamera aktiv – Barcode vor die Kamera halten.","success");
+ }catch(err){stocktakeScanner=null;$("stocktakeCameraStart").disabled=false;message("stocktakeScanStatus","Kamera konnte nicht gestartet werden. HTTPS und Kameraberechtigung prüfen.","error");}
+});
+$("stocktakeCameraStop").addEventListener("click",stopStocktakeCamera);
+$("finishStocktake").addEventListener("click",async()=>{
+ if(!stocktakeState||!canAdminister())return;
+ const pending=stocktakeState.rows.filter(x=>x.counted===null);
+ if(pending.length){message("stocktakeStatus",pending.length+" Artikel sind noch nicht gezählt.","error");return;}
+ const changes=stocktakeState.rows.filter(x=>Number(x.counted)!==Number(x.expected)).length;
+ if(!confirm("Inventur mit "+stocktakeState.rows.length+" Artikeln abschließen? "+changes+" Bestände werden angepasst und als Inventur-Korrektur protokolliert. Dieser Schritt kann nicht automatisch rückgängig gemacht werden."))return;
+ $("finishStocktake").disabled=true;message("stocktakeStatus","Inventur wird sicher übernommen …");
+ const payload=stocktakeState.rows.map(x=>({item_id:x.item_id,expected:Number(x.expected),counted:Number(x.counted)}));
+ const {data,error}=await db.rpc("apply_inventory_stocktake",{p_counts:payload,p_note:stocktakeState.note||null});
+ if(error){message("stocktakeStatus","Abschluss fehlgeschlagen: "+error.message,"error");renderStocktake();return;}
+ stopStocktakeCamera();try{localStorage.removeItem(stocktakeStorageKey());}catch(e){}
+ stocktakeState=null;await loadAll();showTab("stocktake");
+ message("stocktakeStatus","Inventur abgeschlossen. "+Number(data||0)+" Artikel wurden korrigiert; alle Änderungen stehen in der Bewegungshistorie.","success");
+});
+
 $("tabs").addEventListener("click",e=>{const tab=e.target.dataset.tab;if(tab)showTab(tab);});
 document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.goto)));
-function showTab(tab){if(tab==="users"&&currentRole!=="admin")return;document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));["dashboard","items","categories","locations","history","loans","users","tools"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==tab));}
+function showTab(tab){if(tab==="users"&&currentRole!=="admin")return;if(tab!=="stocktake")stopStocktakeCamera();document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));["dashboard","items","categories","locations","history","stocktake","loans","users","tools"].forEach(t=>$("tab-"+t).classList.toggle("hidden",t!==tab));}
 function lookup(value){
  const item=items.find(x=>x.barcode.toLowerCase()===value.trim().toLowerCase());$("scanResult").classList.remove("hidden");
  $("scanResult").innerHTML=item?'<b>'+esc(item.name)+'</b><p class="small">Barcode: '+esc(item.barcode)+'<br>Kategorie: '+esc(categoryName(item.category_id))+'<br>Lagerort: '+esc(locationName(item.location_id))+'<br>Bestand: '+fmt(item.quantity)+' '+esc(item.unit)+'<br>Status: '+esc(statusName(item.status))+'</p><button id="scanBook">Lagerbewegung buchen</button>':'<b>Kein Artikel gefunden</b><p class="small">Für den Barcode '+esc(value)+' ist noch kein Artikel gespeichert.</p>';
