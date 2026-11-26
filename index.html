@@ -299,6 +299,7 @@ hr{border-top-color:rgba(255,255,255,.10)}
    </div>
    <div class="panel"><h2>Willkommen im Schullager</h2><p class="muted">Hier verwaltest du Veranstaltungstechnik, Kabel, Licht, Audio, Werkzeug und Verbrauchsmaterial. Jeder Datensatz kann eine eigene Barcode-Kennung erhalten.</p><div class="actions"><button data-goto="items">Artikel verwalten</button><button class="secondary" data-goto="tools">Barcode scannen</button></div></div>
    <div class="panel"><h3>Zuletzt bearbeitet</h3><div id="recentItems" class="tablewrap"></div></div>
+   <div class="panel"><h3>Mindestbestand prüfen</h3><p class="muted">Artikel, deren Bestand den festgelegten Mindestbestand erreicht oder unterschritten hat.</p><div id="lowStockTable" class="tablewrap"></div></div>
   </section>
 
   <section id="tab-items" class="hidden">
@@ -332,7 +333,7 @@ hr{border-top-color:rgba(255,255,255,.10)}
      <div class="field"><label for="sortItems">Sortieren nach</label><select id="sortItems"><option value="name">Name A–Z</option><option value="barcode">Barcode</option><option value="category">Kategorie</option><option value="location">Lagerort</option><option value="quantity">Menge (absteigend)</option><option value="status">Status</option><option value="updated">Zuletzt geändert</option></select></div>
      <div class="field"><label for="filterCategory">Kategorie</label><select id="filterCategory"><option value="">Alle Kategorien</option></select></div>
     </div>
-    <div class="toolbar no-print"><button id="printSelectedLabels" class="secondary" type="button" disabled>Etiketten drucken (0)</button><span class="small">Mehrere Artikel markieren und gemeinsam drucken.</span></div>
+    <div class="toolbar no-print"><button id="printSelectedLabels" class="secondary" type="button" disabled>Etiketten drucken (0)</button><button id="exportInventoryCsv" class="secondary" type="button">Bestand als CSV exportieren</button><span class="small">Mehrere Artikel markieren und gemeinsam drucken oder den Bestand als Tabelle exportieren.</span><span id="exportStatus" class="small" role="status"></span></div>
     <div id="itemsTable" class="tablewrap"></div>
    </div>
   </section>
@@ -434,7 +435,7 @@ async function loadAll(){
  $("locationForm").classList.toggle("hidden",!canManage());
  renderAll();
 }
-function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();renderLoans();renderUsers();}
+function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();renderLowStock();renderLoans();renderUsers();}
 function renderSelects(){
  const opts=(arr,first)=>first+arr.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
  $("itemCategory").innerHTML=opts(categories,'<option value="">Ohne Kategorie</option>');
@@ -469,6 +470,34 @@ function renderItems(){
 }
 function updateBatchPrintButton(){const count=selectedLabels.size;const btn=$("printSelectedLabels");btn.disabled=count===0;btn.textContent="Etiketten drucken ("+count+")";}
 function renderRecent(){const rows=[...items].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,5);$("recentItems").innerHTML=rows.length?'<table><tr><th>Artikel</th><th>Barcode</th><th>Lagerort</th></tr>'+rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.barcode)+'</td><td>'+esc(locationName(x.location_id))+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Artikel angelegt.</div>';}
+function renderLowStock(){
+ const rows=items.filter(x=>Number(x.min_quantity)>0&&Number(x.quantity)<=Number(x.min_quantity)).sort((a,b)=>(Number(a.quantity)-Number(a.min_quantity))-(Number(b.quantity)-Number(b.min_quantity)));
+ $("lowStockTable").innerHTML=rows.length?'<table><thead><tr><th>Artikel</th><th>Bestand</th><th>Mindestbestand</th><th>Lagerort</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b><div class="muted">'+esc(x.barcode)+'</div></td><td><span class="pill warn">'+fmt(x.quantity)+' '+esc(x.unit)+'</span></td><td>'+fmt(x.min_quantity)+' '+esc(x.unit)+'</td><td>'+esc(locationName(x.location_id))+'</td><td><button class="smallbtn secondary" data-low-item="'+x.id+'">Ansehen</button></td></tr>').join('')+'</tbody></table>':'<div class="empty">Aktuell gibt es keine Artikel unter dem Mindestbestand. Alles im grünen Bereich.</div>';
+ $("lowStockTable").querySelectorAll("[data-low-item]").forEach(b=>b.addEventListener("click",()=>{const x=items.find(v=>v.id===b.dataset.lowItem);if(!x)return;showTab("items");$("searchItems").value=x.barcode;renderItems();}));
+}
+function csvSafe(value){
+ const s=String(value??"");
+ return '"'+(/^[\s]*[=+\-@]/.test(s)?"'"+s:s).replace(/"/g,'""')+'"';
+}
+function exportInventoryCsv(){
+ const rows=[...items].sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"de"));
+ const columns=[
+  ["Bezeichnung",x=>x.name],["Inventar-ID",x=>x.barcode],["Kategorie",x=>categoryName(x.category_id)],["Lagerort",x=>locationName(x.location_id)],
+  ["Bestand",x=>x.quantity],["Einheit",x=>x.unit],["Mindestbestand",x=>x.min_quantity],
+  ["Art",x=>({equipment:"Gerät / Ausstattung",consumable:"Verbrauchsmaterial"}[x.item_type]||x.item_type)],
+  ["Zustand",x=>({new:"Neu",good:"Gut",used:"Gebraucht",defective:"Defekt"}[x.condition]||x.condition)],
+  ["Status",x=>statusName(x.status)],["Hersteller",x=>x.manufacturer],["Modell",x=>x.model],
+  ["Seriennummer",x=>x.serial_number],["Notizen",x=>x.description],["Zuletzt geändert",x=>x.updated_at]
+ ];
+ const csv="\uFEFF"+[columns.map(x=>csvSafe(x[0])).join(";"),...rows.map(x=>columns.map(col=>csvSafe(col[1](x))).join(";"))].join("\r\n");
+ const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");
+ const date=new Date().toISOString().slice(0,10);
+ a.href=url;a.download="Schullager-Bestand-"+date+".csv";
+ document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ $("exportStatus").textContent=rows.length+" Artikel exportiert.";
+}
+$("exportInventoryCsv").addEventListener("click",exportInventoryCsv);
 function renderCategories(){$("categoryList").innerHTML=categories.length?'<table><tr><th>Kategorie</th><th>Übergeordnet</th><th>Artikel</th></tr>'+categories.map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+esc(categories.find(p=>p.id===c.parent_id)?.name||"—")+'</td><td>'+items.filter(i=>i.category_id===c.id).length+'</td></tr>').join("")+'</table>':'<div class="empty">Noch keine Kategorien.</div>';}
 function locPath(id){let x=locations.find(l=>l.id===id),parts=[],guard=0;while(x&&guard++<10){parts.unshift(x.name);x=locations.find(l=>l.id===x.parent_id);}return parts.join(" / ");}
 function getLocationDescendants(id){const found=new Set();let changed=true;while(changed){changed=false;for(const l of locations){if(l.parent_id===id||found.has(l.parent_id)){if(!found.has(l.id)){found.add(l.id);changed=true;}}}}return found;}
