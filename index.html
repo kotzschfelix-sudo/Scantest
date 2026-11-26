@@ -300,6 +300,7 @@ hr{border-top-color:rgba(255,255,255,.10)}
    <div class="panel"><h2>Willkommen im Schullager</h2><p class="muted">Hier verwaltest du Veranstaltungstechnik, Kabel, Licht, Audio, Werkzeug und Verbrauchsmaterial. Jeder Datensatz kann eine eigene Barcode-Kennung erhalten.</p><div class="actions"><button data-goto="items">Artikel verwalten</button><button class="secondary" data-goto="tools">Barcode scannen</button></div></div>
    <div class="panel"><h3>Zuletzt bearbeitet</h3><div id="recentItems" class="tablewrap"></div></div>
    <div class="panel"><h3>Mindestbestand prüfen</h3><p class="muted">Artikel, deren Bestand den festgelegten Mindestbestand erreicht oder unterschritten hat.</p><div id="lowStockTable" class="tablewrap"></div></div>
+   <div class="panel"><h3>Rückgaben im Blick</h3><p class="muted">Überfällige und in den nächsten sieben Tagen fällige Ausleihen.</p><div id="upcomingReturns" class="tablewrap"></div></div>
   </section>
 
   <section id="tab-items" class="hidden">
@@ -470,7 +471,7 @@ async function loadAll(){
  $("locationForm").classList.toggle("hidden",!canManage());
  renderAll();
 }
-function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();renderLowStock();renderLoans();renderUsers();renderStocktake();}
+function renderAll(){renderSelects();renderStats();renderItems();renderCategories();renderLocations();renderHistory();renderRecent();renderLowStock();renderUpcomingReturns();renderLoans();renderUsers();renderStocktake();}
 function renderSelects(){
  const opts=(arr,first)=>first+arr.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
  $("itemCategory").innerHTML=opts(categories,'<option value="">Ohne Kategorie</option>');
@@ -510,6 +511,19 @@ function renderLowStock(){
  const rows=items.filter(x=>Number(x.min_quantity)>0&&Number(x.quantity)<=Number(x.min_quantity)).sort((a,b)=>(Number(a.quantity)-Number(a.min_quantity))-(Number(b.quantity)-Number(b.min_quantity)));
  $("lowStockTable").innerHTML=rows.length?'<table><thead><tr><th>Artikel</th><th>Bestand</th><th>Mindestbestand</th><th>Lagerort</th><th></th></tr></thead><tbody>'+rows.map(x=>'<tr><td><b>'+esc(x.name)+'</b><div class="muted">'+esc(x.barcode)+'</div></td><td><span class="pill warn">'+fmt(x.quantity)+' '+esc(x.unit)+'</span></td><td>'+fmt(x.min_quantity)+' '+esc(x.unit)+'</td><td>'+esc(locationName(x.location_id))+'</td><td><button class="smallbtn secondary" data-low-item="'+x.id+'">Ansehen</button></td></tr>').join('')+'</tbody></table>':'<div class="empty">Aktuell gibt es keine Artikel unter dem Mindestbestand. Alles im grünen Bereich.</div>';
  $("lowStockTable").querySelectorAll("[data-low-item]").forEach(b=>b.addEventListener("click",()=>{const x=items.find(v=>v.id===b.dataset.lowItem);if(!x)return;showTab("items");$("searchItems").value=x.barcode;renderItems();}));
+}
+function renderUpcomingReturns(){
+ const now=new Date(),limit=new Date(now.getTime()+7*24*60*60*1000);
+ const open=loans.filter(l=>l.status==="active"&&Number(l.quantity)-Number(l.returned_quantity||0)>0&&l.due_at);
+ const relevant=open.filter(l=>new Date(l.due_at)<=limit).sort((a,b)=>new Date(a.due_at)-new Date(b.due_at));
+ const itemMap=new Map(allItems.map(x=>[x.id,x]));
+ $("upcomingReturns").innerHTML=relevant.length?'<table><thead><tr><th>Artikel</th><th>Empfänger</th><th>Rückgabe bis</th><th>Offen</th><th>Status</th><th></th></tr></thead><tbody>'+relevant.map(l=>{
+  const x=itemMap.get(l.item_id),due=new Date(l.due_at),overdue=due<now,days=Math.ceil((due-now)/(24*60*60*1000));
+  const state=overdue?'<span class="pill bad">Überfällig</span>':days===0?'<span class="pill warn">Heute fällig</span>':'<span class="pill warn">In '+days+' Tagen</span>';
+  const remain=Number(l.quantity)-Number(l.returned_quantity||0);
+  return '<tr><td><b>'+esc(x?.name||"Archivierter Artikel")+'</b><div class="muted">'+esc(x?.barcode||"")+'</div></td><td>'+esc(l.borrower_name||"—")+'</td><td>'+due.toLocaleDateString("de-DE")+'</td><td>'+fmt(remain)+' '+esc(x?.unit||"Stück")+'</td><td>'+state+'</td><td>'+(canManage()?'<button class="smallbtn" data-due-return="'+l.id+'">Rückgabe</button>':'')+'</td></tr>';
+ }).join("")+'</tbody></table>':'<div class="empty">Keine überfälligen oder in den nächsten sieben Tagen fälligen Rückgaben.</div>';
+ $("upcomingReturns").querySelectorAll("[data-due-return]").forEach(b=>b.addEventListener("click",()=>openReturn(b.dataset.dueReturn)));
 }
 function csvSafe(value){
  const s=String(value??"");
